@@ -43,6 +43,22 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '16kb' }));
 
+app.get('/', (_req, res) => {
+  res.type('application/json').send(
+    JSON.stringify(
+      {
+        service: 'livekit-translate-token-api',
+        routes: {
+          health: 'GET /health',
+          livekitToken: 'POST /livekit/token (JSON body: roomName, identity, displayName, …)',
+        },
+      },
+      null,
+      2,
+    ),
+  );
+});
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
