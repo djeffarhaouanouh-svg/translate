@@ -1,5 +1,7 @@
 'use strict';
 
+// LiveKit token API (deploy trigger: edit this file to force Railway rebuild when using watchPatterns on backend/**).
+
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
