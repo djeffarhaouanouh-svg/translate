@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// WhatsApp-inspired palette for calls (dark surfaces, green accents).
+/// WhatsApp-inspired palette (dark chat surfaces + green accents).
 abstract final class WhatsAppCallTheme {
   static const Color scaffold = Color(0xFF0B141A);
   static const Color surface = Color(0xFF111B21);
   static const Color bar = Color(0xFF1F2C34);
+  static const Color waHeader = Color(0xFF008069);
   static const Color accent = Color(0xFF00A884);
   static const Color accentMuted = Color(0xFF128C7E);
   static const Color onAccent = Color(0xFFE9EDEF);
   static const Color danger = Color(0xFFE53935);
   static const Color subtleText = Color(0xFF8696A0);
   static const Color strongText = Color(0xFFE9EDEF);
+  static const Color bubbleIncoming = Color(0xFF202C33);
 
   static ThemeData material() {
     const base = ColorScheme.dark(
@@ -27,10 +29,15 @@ abstract final class WhatsAppCallTheme {
       colorScheme: base,
       scaffoldBackgroundColor: scaffold,
       appBarTheme: const AppBarTheme(
-        backgroundColor: bar,
-        foregroundColor: strongText,
+        backgroundColor: waHeader,
+        foregroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -39,6 +46,10 @@ abstract final class WhatsAppCallTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: accent, width: 1.5),
+        ),
         hintStyle: const TextStyle(color: subtleText),
         labelStyle: const TextStyle(color: subtleText),
       ),
@@ -46,10 +57,12 @@ abstract final class WhatsAppCallTheme {
         style: FilledButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: onAccent,
+          minimumSize: const Size.fromHeight(48),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
+      dividerTheme: const DividerThemeData(color: Color(0xFF2A3942)),
     );
   }
 }

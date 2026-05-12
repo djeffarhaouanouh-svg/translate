@@ -14,7 +14,7 @@ class LiveKitTranslateApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'LiveKit Call',
+      title: 'Calls',
       debugShowCheckedModeBanner: false,
       theme: WhatsAppCallTheme.material(),
       home: const JoinScreen(),

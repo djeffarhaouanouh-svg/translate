@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -54,7 +55,7 @@ class _CallScreenState extends State<CallScreen> {
     if (!cam.isGranted || !mic.isGranted) {
       setState(() {
         _connecting = false;
-        _connectError = 'Camera and microphone permission are required.';
+        _connectError = 'Camera and microphone permission are required to join the call.';
       });
       return;
     }
@@ -102,6 +103,21 @@ class _CallScreenState extends State<CallScreen> {
         });
       }
     }
+  }
+
+  RemoteParticipant? _primaryRemote(Room room) {
+    final it = room.remoteParticipants.values.iterator;
+    if (!it.moveNext()) return null;
+    return it.current;
+  }
+
+  String _remoteDisplayName(RemoteParticipant? p) {
+    if (p == null) return '';
+    final n = p.name.trim();
+    if (n.isNotEmpty) return n;
+    final id = p.identity;
+    if (id.length > 14) return '${id.substring(0, 14)}…';
+    return id;
   }
 
   VideoTrack? _remoteVideo(Room room) {
@@ -154,6 +170,32 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  Future<void> _confirmLeave() async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WhatsAppCallTheme.bar,
+        title: const Text('Leave call?', style: TextStyle(color: WhatsAppCallTheme.strongText)),
+        content: const Text(
+          'You will disconnect from this room.',
+          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Stay'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: WhatsAppCallTheme.danger),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+    if (leave == true && mounted) await _hangUp();
+  }
+
   @override
   void dispose() {
     final ev = _roomEvents;
@@ -176,14 +218,35 @@ class _CallScreenState extends State<CallScreen> {
   Widget build(BuildContext context) {
     if (_connectError != null) {
       return Scaffold(
-        appBar: AppBar(leading: CloseButton(onPressed: () => Navigator.pop(context))),
+        backgroundColor: WhatsAppCallTheme.scaffold,
+        appBar: AppBar(
+          backgroundColor: WhatsAppCallTheme.waHeader,
+          foregroundColor: Colors.white,
+          title: const Text('Could not join'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(
-              _connectError!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: WhatsAppCallTheme.danger),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: WhatsAppCallTheme.danger.withValues(alpha: 0.9)),
+                const SizedBox(height: 16),
+                Text(
+                  _connectError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: WhatsAppCallTheme.subtleText, height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go back'),
+                ),
+              ],
             ),
           ),
         ),
@@ -191,8 +254,31 @@ class _CallScreenState extends State<CallScreen> {
     }
 
     if (_connecting || _room == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: WhatsAppCallTheme.scaffold,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                height: 40,
+                width: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: WhatsAppCallTheme.accent,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Connecting to ${widget.roomName}…',
+                style: const TextStyle(
+                  color: WhatsAppCallTheme.subtleText,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -201,160 +287,228 @@ class _CallScreenState extends State<CallScreen> {
     final local = _localVideo(room);
     final remoteCount = room.remoteParticipants.length;
     final connection = room.connectionState;
+    final peer = _primaryRemote(room);
+    final peerName = _remoteDisplayName(peer);
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (remote != null)
-              VideoTrackRenderer(
-                remote,
-                fit: VideoViewFit.cover,
-                mirrorMode: VideoViewMirrorMode.off,
-              )
-            else
-              Container(
-                color: WhatsAppCallTheme.surface,
-                alignment: Alignment.center,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.person, size: 72, color: Colors.white.withValues(alpha: 0.35)),
-                    const SizedBox(height: 12),
-                    Text(
-                      remoteCount == 0 ? 'Waiting for the other person…' : 'No video yet…',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.65),
-                      Colors.black.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: _hangUp,
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.roomName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _confirmLeave();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: Colors.black,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: SafeArea(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (remote != null)
+                  VideoTrackRenderer(
+                    remote,
+                    fit: VideoViewFit.cover,
+                    mirrorMode: VideoViewMirrorMode.off,
+                  )
+                else
+                  Container(
+                    color: WhatsAppCallTheme.surface,
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.person, size: 80, color: Colors.white.withValues(alpha: 0.28)),
+                        const SizedBox(height: 14),
+                        Text(
+                          remoteCount == 0 ? 'Waiting for the other person…' : 'No remote video yet…',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.78),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
                           ),
+                        ),
+                        if (remoteCount == 0) ...[
+                          const SizedBox(height: 8),
                           Text(
-                            '${widget.displayName} · ${_connectionLabel(connection)}',
+                            'Share the same room name on another device.',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.75),
-                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 13,
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    if (remoteCount > 1)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: WhatsAppCallTheme.danger.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          '2+ people',
-                          style: TextStyle(color: Colors.white, fontSize: 11),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (local != null && _camOn)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 56,
-                right: 12,
-                width: 112,
-                height: 168,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: DecoratedBox(
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white24),
-                      color: Colors.black,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.72),
+                          Colors.black.withValues(alpha: 0),
+                        ],
+                      ),
                     ),
-                    child: VideoTrackRenderer(
-                      local,
-                      fit: VideoViewFit.cover,
-                      mirrorMode: VideoViewMirrorMode.mirror,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: _confirmLeave,
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          tooltip: 'Leave',
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.roomName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 17,
+                                ),
+                              ),
+                              Text(
+                                '${widget.displayName} · ${_connectionLabel(connection)}',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (remoteCount > 1)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: WhatsAppCallTheme.danger.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              '2+ in room',
+                              style: TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.75),
-                      Colors.black.withValues(alpha: 0),
-                    ],
+                if (peerName.isNotEmpty && remote != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 132,
+                    child: IgnorePointer(
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Text(
+                              peerName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (local != null && _camOn)
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top + 52,
+                    right: 12,
+                    width: 118,
+                    height: 176,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white30, width: 1.5),
+                          color: Colors.black,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: VideoTrackRenderer(
+                          local,
+                          fit: VideoViewFit.cover,
+                          mirrorMode: VideoViewMirrorMode.mirror,
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(16, 28, 16, 16 + MediaQuery.paddingOf(context).bottom),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.82),
+                          Colors.black.withValues(alpha: 0),
+                        ],
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _RoundCallButton(
+                          icon: _micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+                          label: _micOn ? 'Mute' : 'Unmute',
+                          background: WhatsAppCallTheme.bar,
+                          onTap: _toggleMic,
+                        ),
+                        _RoundCallButton(
+                          icon: _camOn ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                          label: _camOn ? 'Video' : 'Off',
+                          background: WhatsAppCallTheme.bar,
+                          onTap: _toggleCam,
+                        ),
+                        _RoundCallButton(
+                          icon: Icons.call_end_rounded,
+                          label: 'End',
+                          background: WhatsAppCallTheme.danger,
+                          onTap: _hangUp,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _RoundCallButton(
-                      icon: _micOn ? Icons.mic : Icons.mic_off,
-                      label: _micOn ? 'Mute' : 'Unmute',
-                      background: WhatsAppCallTheme.bar,
-                      onTap: _toggleMic,
-                    ),
-                    _RoundCallButton(
-                      icon: _camOn ? Icons.videocam : Icons.videocam_off,
-                      label: _camOn ? 'Video' : 'Off',
-                      background: WhatsAppCallTheme.bar,
-                      onTap: _toggleCam,
-                    ),
-                    _RoundCallButton(
-                      icon: Icons.call_end,
-                      label: 'End',
-                      background: WhatsAppCallTheme.danger,
-                      onTap: _hangUp,
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -395,19 +549,21 @@ class _RoundCallButton extends StatelessWidget {
         Material(
           color: background,
           shape: const CircleBorder(),
+          elevation: 4,
+          shadowColor: Colors.black54,
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Icon(icon, color: Colors.white, size: 26),
+              padding: const EdgeInsets.all(20),
+              child: Icon(icon, color: Colors.white, size: 28),
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 12),
         ),
       ],
     );
