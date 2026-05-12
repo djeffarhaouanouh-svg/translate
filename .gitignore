@@ -36,6 +36,7 @@ migrate_working_dir/
 .env
 backend/.env
 backend/node_modules/
+/node_modules/
 /coverage/
 
 # Symbolication related

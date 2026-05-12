@@ -1,0 +1,10 @@
+{
+  "name": "livekit-translate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Railway/Railpack entry: installs and runs the LiveKit token API in backend/. The Flutter app is not built on Railway.",
+  "scripts": {
+    "postinstall": "npm install --prefix backend",
+    "start": "node backend/server.js"
+  }
+}
