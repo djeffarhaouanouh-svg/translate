@@ -88,7 +88,7 @@ class _JoinScreenState extends State<JoinScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final apiBase = resolvedTokenApiBase();
+    final apiBase = displayTokenApiBase();
 
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,

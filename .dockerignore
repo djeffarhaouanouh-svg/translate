@@ -1,0 +1,17 @@
+.git
+.github
+**/node_modules
+.dart_tool
+build
+**/build
+android
+ios
+linux
+macos
+windows
+**/.gradle
+**/*.iml
+.idea
+coverage
+*.md
+terminals

@@ -1,7 +1,9 @@
 'use strict';
 
-// LiveKit token API (deploy trigger: edit this file to force Railway rebuild when using watchPatterns on backend/**).
+// LiveKit token API + optional Flutter web UI (folder ./web from Docker build).
 
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -13,6 +15,10 @@ const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 const PORT = Number(process.env.PORT || 8787);
+
+const webPath = path.join(__dirname, 'web');
+const webIndex = path.join(webPath, 'index.html');
+const hasWebUi = fs.existsSync(webIndex);
 
 function assertEnv() {
   const missing = [];
@@ -45,30 +51,25 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '16kb' }));
 
-app.get('/', (_req, res) => {
-  res.type('application/json').send(
-    JSON.stringify(
-      {
-        service: 'livekit-translate-token-api',
-        routes: {
-          health: 'GET /health',
-          livekitToken: 'POST /livekit/token (JSON body: roomName, identity, displayName, …)',
-        },
-      },
-      null,
-      2,
-    ),
-  );
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, webUi: hasWebUi });
 });
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+app.get('/api', (_req, res) => {
+  res.json({
+    service: 'livekit-translate',
+    webUi: hasWebUi,
+    routes: {
+      health: 'GET /health',
+      livekitToken: 'POST /livekit/token',
+      translationPlaceholder: 'POST /translation/realtime/session',
+    },
+  });
 });
 
 /**
  * POST /livekit/token
  * Body: { roomName, identity, displayName?, sourceLang?, targetLang? }
- * sourceLang/targetLang reserved for future OpenAI Realtime translation routing.
  */
 app.post('/livekit/token', (req, res) => {
   try {
@@ -114,10 +115,6 @@ app.post('/livekit/token', (req, res) => {
   });
 });
 
-/**
- * Reserved: issue short-lived client secret or session for OpenAI Realtime.
- * Implement with server-side OPENAI_API_KEY only — never expose to the Flutter app.
- */
 app.post('/translation/realtime/session', (_req, res) => {
   return res.status(501).json({
     error: 'not_implemented',
@@ -125,7 +122,45 @@ app.post('/translation/realtime/session', (_req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+if (hasWebUi) {
+  app.use(express.static(webPath));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      return next();
+    }
+    const p = req.path || '';
+    if (
+      p.startsWith('/livekit') ||
+      p === '/health' ||
+      p.startsWith('/translation') ||
+      p === '/api'
+    ) {
+      return next();
+    }
+    return res.sendFile(webIndex, (err) => (err ? next(err) : undefined));
+  });
+} else {
+  app.get('/', (_req, res) => {
+    res.type('application/json').send(
+      JSON.stringify(
+        {
+          service: 'livekit-translate-token-api',
+          hint: 'Build with Docker to bundle Flutter web in ./web',
+          routes: {
+            health: 'GET /health',
+            livekitToken: 'POST /livekit/token',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  });
+}
+
+app.listen(PORT, '0.0.0.0', () => {
   // eslint-disable-next-line no-console
-  console.log(`Token API listening on http://0.0.0.0:${PORT}`);
+  console.log(
+    `Listening on http://0.0.0.0:${PORT} (web UI: ${hasWebUi ? 'yes' : 'no'})`,
+  );
 });

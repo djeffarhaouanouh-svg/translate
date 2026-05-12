@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'token_api_resolve_io.dart' if (dart.library.html) 'token_api_resolve_web.dart'
     as resolve;
 
@@ -7,4 +9,12 @@ String resolvedTokenApiBase() {
   const fromEnv = String.fromEnvironment('TOKEN_API_BASE');
   if (fromEnv.isNotEmpty) return fromEnv;
   return resolve.defaultTokenApiBase();
+}
+
+/// Shown in the UI (same-origin web after Docker deploy uses [Uri.base.origin]).
+String displayTokenApiBase() {
+  const fromEnv = String.fromEnvironment('TOKEN_API_BASE');
+  if (fromEnv.isNotEmpty) return fromEnv;
+  if (kIsWeb) return Uri.base.removeFragment().origin;
+  return resolvedTokenApiBase();
 }

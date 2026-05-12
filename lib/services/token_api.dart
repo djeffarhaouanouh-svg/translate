@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
@@ -33,6 +34,25 @@ class TokenApiException implements Exception {
   String toString() => 'TokenApiException($statusCode): $message';
 }
 
+Uri _liveKitTokenUri() {
+  const fromEnv = String.fromEnvironment('TOKEN_API_BASE');
+  if (fromEnv.isNotEmpty) {
+    final b = fromEnv.replaceAll(RegExp(r'/$'), '');
+    return Uri.parse('$b/livekit/token');
+  }
+  if (kIsWeb) {
+    final o = Uri.base.removeFragment();
+    return Uri(
+      scheme: o.scheme,
+      host: o.host,
+      port: o.hasPort ? o.port : null,
+      path: '/livekit/token',
+    );
+  }
+  final b = resolvedTokenApiBase().replaceAll(RegExp(r'/$'), '');
+  return Uri.parse('$b/livekit/token');
+}
+
 Future<LiveKitTokenResponse> fetchLiveKitToken({
   required String roomName,
   required String identity,
@@ -40,8 +60,7 @@ Future<LiveKitTokenResponse> fetchLiveKitToken({
   String sourceLang = '',
   String targetLang = '',
 }) async {
-  final base = resolvedTokenApiBase().replaceAll(RegExp(r'/$'), '');
-  final uri = Uri.parse('$base/livekit/token');
+  final uri = _liveKitTokenUri();
   final res = await http.post(
     uri,
     headers: const {'Content-Type': 'application/json'},
