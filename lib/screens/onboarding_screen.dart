@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../services/languages.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 
-/// First-run flow: first name + translation languages (stored locally).
+/// First-run flow: first name + the user's own spoken language (stored locally).
+/// The remote participant's language is discovered from their LiveKit metadata
+/// at call time — no manual entry needed.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({
     super.key,
@@ -23,8 +26,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
   final _nameCtrl = TextEditingController();
-  final _sourceCtrl = TextEditingController();
-  final _targetCtrl = TextEditingController();
+  String? _selectedLang;
   int _page = 0;
 
   @override
@@ -38,8 +40,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (!mounted || snap == null) return;
     setState(() {
       _nameCtrl.text = snap.firstName;
-      _sourceCtrl.text = snap.sourceLang;
-      _targetCtrl.text = snap.targetLang;
+      final stored = snap.sourceLang.trim();
+      if (stored.isNotEmpty && findLanguageByCode(stored) != null) {
+        _selectedLang = findLanguageByCode(stored)!.code;
+      }
     });
   }
 
@@ -47,8 +51,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void dispose() {
     _pageController.dispose();
     _nameCtrl.dispose();
-    _sourceCtrl.dispose();
-    _targetCtrl.dispose();
     super.dispose();
   }
 
@@ -56,14 +58,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your first name.')),
+        const SnackBar(content: Text('Entre ton prénom.')),
+      );
+      return;
+    }
+    if (_selectedLang == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choisis la langue que tu parles.')),
       );
       return;
     }
     await UserPrefs.completeOnboarding(
       firstName: name,
-      sourceLang: _sourceCtrl.text.trim(),
-      targetLang: _targetCtrl.text.trim(),
+      sourceLang: _selectedLang!,
+      // Other person's language is now discovered live from their metadata.
+      targetLang: '',
     );
     if (!mounted) return;
     widget.onCompleted();
@@ -75,7 +84,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return Scaffold(
         backgroundColor: WhatsAppCallTheme.scaffold,
         appBar: AppBar(
-          title: const Text('Your profile'),
+          title: const Text('Ton profil'),
           backgroundColor: WhatsAppCallTheme.waHeader,
           foregroundColor: Colors.white,
         ),
@@ -90,35 +99,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   textCapitalization: TextCapitalization.words,
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
                   decoration: const InputDecoration(
-                    labelText: 'First name',
-                    hintText: 'e.g. Alex',
+                    labelText: 'Prénom',
+                    hintText: 'ex. Alex',
                     prefixIcon: Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _sourceCtrl,
-                  autocorrect: false,
-                  style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                  decoration: const InputDecoration(
-                    labelText: 'Your spoken language (BCP-47)',
-                    hintText: 'fr',
+                const SizedBox(height: 24),
+                const Text(
+                  'La langue que tu parles',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _targetCtrl,
-                  autocorrect: false,
-                  style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                  decoration: const InputDecoration(
-                    labelText: "The other person's language (BCP-47)",
-                    hintText: 'en',
-                  ),
+                const SizedBox(height: 12),
+                _LanguageGrid(
+                  selected: _selectedLang,
+                  onSelect: (code) => setState(() => _selectedLang = code),
                 ),
                 const SizedBox(height: 28),
                 FilledButton(
                   onPressed: _finish,
-                  child: const Text('Save'),
+                  child: const Text('Enregistrer'),
                 ),
               ],
             ),
@@ -145,7 +148,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onNext: () {
                       if (_nameCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please enter your first name.')),
+                          const SnackBar(content: Text('Entre ton prénom.')),
                         );
                         return;
                       }
@@ -155,9 +158,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       );
                     },
                   ),
-                  _StepLanguages(
-                    sourceCtrl: _sourceCtrl,
-                    targetCtrl: _targetCtrl,
+                  _StepLanguage(
+                    selected: _selectedLang,
+                    onSelect: (code) => setState(() => _selectedLang = code),
                     onBack: () => _pageController.previousPage(
                       duration: const Duration(milliseconds: 280),
                       curve: Curves.easeOutCubic,
@@ -189,7 +192,7 @@ class _OnboardingHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              page == 0 ? 'Welcome' : 'Translation',
+              page == 0 ? 'Bienvenue' : 'Ta langue',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 24,
@@ -199,8 +202,8 @@ class _OnboardingHeader extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               page == 0
-                  ? 'Tell us how to call you in calls.'
-                  : 'These map to OpenAI Realtime later: your language vs theirs (bidirectional).',
+                  ? 'Dis-nous comment t\'appeler dans les appels.'
+                  : 'Choisis la langue que tu parles. La langue de l\'autre est détectée automatiquement quand il rejoint l\'appel.',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.85),
                 fontSize: 14,
@@ -262,15 +265,15 @@ class _StepWelcome extends StatelessWidget {
             textCapitalization: TextCapitalization.words,
             style: const TextStyle(color: WhatsAppCallTheme.strongText, fontSize: 16),
             decoration: const InputDecoration(
-              labelText: 'First name',
-              hintText: 'e.g. Alex',
+              labelText: 'Prénom',
+              hintText: 'ex. Alex',
               prefixIcon: Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
             ),
           ),
           const SizedBox(height: 28),
           FilledButton(
             onPressed: onNext,
-            child: const Text('Next'),
+            child: const Text('Suivant'),
           ),
         ],
       ),
@@ -278,16 +281,16 @@ class _StepWelcome extends StatelessWidget {
   }
 }
 
-class _StepLanguages extends StatelessWidget {
-  const _StepLanguages({
-    required this.sourceCtrl,
-    required this.targetCtrl,
+class _StepLanguage extends StatelessWidget {
+  const _StepLanguage({
+    required this.selected,
+    required this.onSelect,
     required this.onBack,
     required this.onFinish,
   });
 
-  final TextEditingController sourceCtrl;
-  final TextEditingController targetCtrl;
+  final String? selected;
+  final ValueChanged<String> onSelect;
   final VoidCallback onBack;
   final VoidCallback onFinish;
 
@@ -298,46 +301,94 @@ class _StepLanguages extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: sourceCtrl,
-            autocorrect: false,
-            style: const TextStyle(color: WhatsAppCallTheme.strongText),
-            decoration: const InputDecoration(
-              labelText: 'Your spoken language (BCP-47)',
-              hintText: 'fr',
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: targetCtrl,
-            autocorrect: false,
-            style: const TextStyle(color: WhatsAppCallTheme.strongText),
-            decoration: const InputDecoration(
-              labelText: "The other person's language (BCP-47)",
-              hintText: 'en',
-            ),
-          ),
+          _LanguageGrid(selected: selected, onSelect: onSelect),
           const SizedBox(height: 12),
           const Text(
-            'Example: you choose fr + en — you speak French; the other speaks English. '
-            'Later, OpenAI will translate your voice to English for them and their voice to French for you. '
-            'Leave blank if you only want plain video calls for now.',
+            'En appel, on traduira automatiquement la voix de l\'autre dans ta langue, et la tienne dans la sienne.',
             style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13, height: 1.4),
           ),
           const SizedBox(height: 28),
           Row(
             children: [
-              TextButton(onPressed: onBack, child: const Text('Back')),
+              TextButton(onPressed: onBack, child: const Text('Retour')),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
                   onPressed: onFinish,
-                  child: const Text('Get started'),
+                  child: const Text('Commencer'),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LanguageGrid extends StatelessWidget {
+  const _LanguageGrid({required this.selected, required this.onSelect});
+
+  final String? selected;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final lang in supportedLanguages)
+          _LanguageChip(
+            language: lang,
+            selected: lang.code == selected,
+            onTap: () => onSelect(lang.code),
+          ),
+      ],
+    );
+  }
+}
+
+class _LanguageChip extends StatelessWidget {
+  const _LanguageChip({
+    required this.language,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppLanguage language;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected ? WhatsAppCallTheme.accent : WhatsAppCallTheme.bar;
+    final border = selected ? WhatsAppCallTheme.accent : Colors.white.withValues(alpha: 0.08);
+    final fg = selected ? Colors.white : WhatsAppCallTheme.strongText;
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(language.flag, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 10),
+              Text(
+                language.label,
+                style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

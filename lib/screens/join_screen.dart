@@ -3,11 +3,11 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
+import '../services/languages.dart';
 import '../services/token_api.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
-import '../translation/translation_route.dart';
 import 'call_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -23,8 +23,7 @@ class JoinScreen extends StatefulWidget {
 class _JoinScreenState extends State<JoinScreen> {
   final _roomCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
-  final _sourceLangCtrl = TextEditingController();
-  final _targetLangCtrl = TextEditingController();
+  String _sourceLang = '';
   bool _busy = false;
   String? _error;
 
@@ -39,8 +38,7 @@ class _JoinScreenState extends State<JoinScreen> {
     if (!mounted || snap == null) return;
     setState(() {
       _nameCtrl.text = snap.firstName;
-      _sourceLangCtrl.text = snap.sourceLang;
-      _targetLangCtrl.text = snap.targetLang;
+      _sourceLang = snap.sourceLang.trim();
     });
   }
 
@@ -60,8 +58,6 @@ class _JoinScreenState extends State<JoinScreen> {
   void dispose() {
     _roomCtrl.dispose();
     _nameCtrl.dispose();
-    _sourceLangCtrl.dispose();
-    _targetLangCtrl.dispose();
     super.dispose();
   }
 
@@ -80,7 +76,7 @@ class _JoinScreenState extends State<JoinScreen> {
     if (room.length < 3 || name.isEmpty) {
       setState(() {
         _busy = false;
-        _error = 'Enter a room name (3+ characters) and your display name.';
+        _error = 'Entre un nom de room (3+ caractères) et ton prénom.';
       });
       return;
     }
@@ -88,7 +84,14 @@ class _JoinScreenState extends State<JoinScreen> {
       setState(() {
         _busy = false;
         _error =
-            'Room name must be 3–64 characters: only letters, numbers, _ and - (no spaces or #). Example: dinner-with-sam';
+            'Le nom de room doit faire 3 à 64 caractères : lettres, chiffres, _ et - uniquement (pas d\'espace ni #). Exemple : diner-avec-sam';
+      });
+      return;
+    }
+    if (_sourceLang.isEmpty) {
+      setState(() {
+        _busy = false;
+        _error = 'Choisis ta langue dans ton profil avant de rejoindre.';
       });
       return;
     }
@@ -97,14 +100,11 @@ class _JoinScreenState extends State<JoinScreen> {
         roomName: room,
         identity: _newIdentity(),
         displayName: name,
-        sourceLang: _sourceLangCtrl.text.trim(),
-        targetLang: _targetLangCtrl.text.trim(),
+        // Only the user's own language is sent — the remote person's language
+        // is discovered live from their participant metadata at call time.
+        sourceLang: _sourceLang,
       );
       if (!mounted) return;
-      final route = TranslationRoute(
-        sourceBcp47: _sourceLangCtrl.text.trim(),
-        targetBcp47: _targetLangCtrl.text.trim(),
-      );
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => CallScreen(
@@ -112,7 +112,7 @@ class _JoinScreenState extends State<JoinScreen> {
             jwt: token.token,
             roomName: token.roomName,
             displayName: name,
-            translationRoute: route,
+            mySourceLang: _sourceLang,
             translation: widget.translation,
           ),
         ),
@@ -127,6 +127,7 @@ class _JoinScreenState extends State<JoinScreen> {
   @override
   Widget build(BuildContext context) {
     final apiBase = displayTokenApiBase();
+    final lang = findLanguageByCode(_sourceLang);
 
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
@@ -144,7 +145,7 @@ class _JoinScreenState extends State<JoinScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Join a room',
+                    'Rejoindre une room',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: WhatsAppCallTheme.strongText,
                           fontWeight: FontWeight.w600,
@@ -152,22 +153,12 @@ class _JoinScreenState extends State<JoinScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Pick any room name and share it with one other person. '
-                    'Both of you must use the same name to connect 1-on-1.',
+                    'Choisis un nom de room et partage-le avec une autre personne. '
+                    'Vous devez utiliser le même nom pour vous retrouver en 1-on-1.',
                     style: TextStyle(
                       color: WhatsAppCallTheme.subtleText,
                       height: 1.4,
                       fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'There is no friend list yet: agree on a room name together (like a shared code), '
-                    'then both tap Start video call.',
-                    style: TextStyle(
-                      color: WhatsAppCallTheme.subtleText.withValues(alpha: 0.85),
-                      height: 1.35,
-                      fontSize: 12,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -180,8 +171,8 @@ class _JoinScreenState extends State<JoinScreen> {
                           autocorrect: false,
                           style: const TextStyle(color: WhatsAppCallTheme.strongText),
                           decoration: const InputDecoration(
-                            labelText: 'Room name',
-                            hintText: 'e.g. dinner-with-sam',
+                            labelText: 'Nom de la room',
+                            hintText: 'ex. diner-avec-sam',
                             prefixIcon: Icon(Icons.tag, color: WhatsAppCallTheme.subtleText),
                           ),
                         ),
@@ -191,8 +182,8 @@ class _JoinScreenState extends State<JoinScreen> {
                           textCapitalization: TextCapitalization.words,
                           style: const TextStyle(color: WhatsAppCallTheme.strongText),
                           decoration: const InputDecoration(
-                            labelText: 'Your name',
-                            hintText: 'As others will see you',
+                            labelText: 'Ton prénom',
+                            hintText: 'Comme les autres te verront',
                             prefixIcon: Icon(Icons.person_outline, color: WhatsAppCallTheme.subtleText),
                           ),
                         ),
@@ -200,59 +191,7 @@ class _JoinScreenState extends State<JoinScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Theme(
-                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                      collapsedBackgroundColor: WhatsAppCallTheme.bar,
-                      backgroundColor: WhatsAppCallTheme.bar,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      iconColor: WhatsAppCallTheme.subtleText,
-                      collapsedIconColor: WhatsAppCallTheme.subtleText,
-                      title: const Text(
-                        'Translation (OpenAI Realtime)',
-                        style: TextStyle(
-                          color: WhatsAppCallTheme.strongText,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 15,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'You hear the other person translated into “Your spoken language”. '
-                        'They need the inverse on their device. Web: best experience.',
-                        style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
-                      ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          child: Column(
-                            children: [
-                              TextField(
-                                controller: _sourceLangCtrl,
-                                autocorrect: false,
-                                style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                                decoration: const InputDecoration(
-                                  labelText: 'Your spoken language (BCP-47)',
-                                  hintText: 'fr',
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: _targetLangCtrl,
-                                autocorrect: false,
-                                style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                                decoration: const InputDecoration(
-                                  labelText: "The other person's language (BCP-47)",
-                                  hintText: 'en',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _LanguageSummaryCard(language: lang, onEdit: _openProfileEditor),
                   if (_error != null) ...[
                     const SizedBox(height: 16),
                     Container(
@@ -293,13 +232,70 @@ class _JoinScreenState extends State<JoinScreen> {
                             children: [
                               Icon(Icons.videocam_rounded, size: 22),
                               SizedBox(width: 10),
-                              Text('Start video call'),
+                              Text('Démarrer l\'appel'),
                             ],
                           ),
                   ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageSummaryCard extends StatelessWidget {
+  const _LanguageSummaryCard({required this.language, required this.onEdit});
+
+  final AppLanguage? language;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: WhatsAppCallTheme.bar,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2A3942)),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      child: Row(
+        children: [
+          Text(
+            language?.flag ?? '🌐',
+            style: const TextStyle(fontSize: 26),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  language != null ? 'Tu parles ${language!.label}' : 'Aucune langue choisie',
+                  style: const TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'La langue de l\'autre est détectée automatiquement.',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.subtleText,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onEdit,
+            tooltip: 'Modifier ton profil',
+            icon: const Icon(Icons.edit_outlined, color: WhatsAppCallTheme.subtleText),
           ),
         ],
       ),
@@ -364,7 +360,7 @@ class _WhatsAppCallHeader extends StatelessWidget {
                   if (onEditProfile != null)
                     IconButton(
                       onPressed: onEditProfile,
-                      tooltip: 'Your profile',
+                      tooltip: 'Ton profil',
                       icon: Icon(
                         Icons.manage_accounts_outlined,
                         color: Colors.white.withValues(alpha: 0.92),

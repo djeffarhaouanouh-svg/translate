@@ -77,6 +77,8 @@ Future<LiveKitTokenResponse> fetchLiveKitToken({
   String targetLang = '',
 }) async {
   final uri = _liveKitTokenUri();
+  // sourceLang goes into the participant metadata; the remote side reads it
+  // from `participant.metadata` to know what language to translate FROM.
   final res = await http.post(
     uri,
     headers: const {'Content-Type': 'application/json'},

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/services.dart';
@@ -17,7 +18,7 @@ class CallScreen extends StatefulWidget {
     required this.jwt,
     required this.roomName,
     required this.displayName,
-    required this.translationRoute,
+    required this.mySourceLang,
     required this.translation,
   });
 
@@ -25,7 +26,9 @@ class CallScreen extends StatefulWidget {
   final String jwt;
   final String roomName;
   final String displayName;
-  final TranslationRoute translationRoute;
+  /// The local user's spoken language (BCP-47). The remote participant's
+  /// language is read live from their LiveKit metadata.
+  final String mySourceLang;
   final RealtimeTranslationPort translation;
 
   @override
@@ -40,8 +43,69 @@ class _CallScreenState extends State<CallScreen> {
   bool _camOn = true;
   EventsListener<RoomEvent>? _roomEvents;
 
+  /// The remote BCP-47 we have attached the translation pipeline with, so we
+  /// only re-attach when it actually changes.
+  String _attachedRemoteLang = '';
+  bool _refreshingTranslation = false;
+  /// Set when an event arrives while a refresh is in flight; we re-run once
+  /// the in-flight call completes so the latest state is reflected.
+  bool _refreshPending = false;
+
   void _onRoomChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// Parse `participant.metadata` (set as JSON in the JWT) and return the
+  /// remote's `sourceLang` if present. Returns empty string on any failure.
+  String _remoteLangFromMetadata(Participant p) {
+    final raw = p.metadata?.trim() ?? '';
+    if (raw.isEmpty) return '';
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final v = decoded['sourceLang'];
+        if (v is String) return v.trim();
+      }
+    } catch (e) {
+      debugPrint('CallScreen: failed to parse remote metadata: $e');
+    }
+    return '';
+  }
+
+  /// Returns the first remote participant whose metadata carries a sourceLang.
+  String _discoverRemoteLang(Room room) {
+    for (final p in room.remoteParticipants.values) {
+      final lang = _remoteLangFromMetadata(p);
+      if (lang.isNotEmpty) return lang;
+    }
+    return '';
+  }
+
+  /// Re-attach the translation pipeline whenever the remote's language
+  /// becomes known or changes. With an empty remote language the route is
+  /// not configured and the pipeline stays idle. Serialized so concurrent
+  /// participant / metadata events do not race the pipeline's own teardown.
+  Future<void> _refreshTranslationBinding(Room room) async {
+    if (_refreshingTranslation) {
+      _refreshPending = true;
+      return;
+    }
+    _refreshingTranslation = true;
+    try {
+      do {
+        _refreshPending = false;
+        final remoteLang = _discoverRemoteLang(room);
+        if (remoteLang == _attachedRemoteLang) continue;
+        _attachedRemoteLang = remoteLang;
+        final route = TranslationRoute(
+          sourceBcp47: widget.mySourceLang,
+          targetBcp47: remoteLang,
+        );
+        await widget.translation.attachToRoom(room, route: route);
+      } while (_refreshPending && mounted);
+    } finally {
+      _refreshingTranslation = false;
+    }
   }
 
   @override
@@ -66,10 +130,9 @@ class _CallScreenState extends State<CallScreen> {
       await room.connect(widget.wsUrl, widget.jwt);
       await room.localParticipant?.setCameraEnabled(true);
       await room.localParticipant?.setMicrophoneEnabled(true);
-      await widget.translation.attachToRoom(
-        room,
-        route: widget.translationRoute,
-      );
+      // First attach with whatever remote-lang we already know (often nothing
+      // yet). Refreshed dynamically as participants join / metadata arrives.
+      await _refreshTranslationBinding(room);
       room.addListener(_onRoomChanged);
       _roomEvents = room.createListener()
         ..on<TrackSubscribedEvent>((_) {
@@ -82,9 +145,15 @@ class _CallScreenState extends State<CallScreen> {
           if (mounted) setState(() {});
         })
         ..on<ParticipantConnectedEvent>((_) {
+          unawaited(_refreshTranslationBinding(room));
           if (mounted) setState(() {});
         })
         ..on<ParticipantDisconnectedEvent>((_) {
+          unawaited(_refreshTranslationBinding(room));
+          if (mounted) setState(() {});
+        })
+        ..on<ParticipantMetadataUpdatedEvent>((_) {
+          unawaited(_refreshTranslationBinding(room));
           if (mounted) setState(() {});
         });
       if (mounted) {
