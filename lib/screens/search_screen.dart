@@ -301,59 +301,75 @@ class _ProfileRow extends StatelessWidget {
     final name = profile.firstName.isNotEmpty
         ? profile.firstName
         : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
-    return Container(
-      constraints: const BoxConstraints(minHeight: 72),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: WhatsAppCallTheme.bar,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: WhatsAppCallTheme.strongText,
-                fontWeight: FontWeight.w600,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Container(
+        height: 72,
+        decoration: BoxDecoration(
+          color: WhatsAppCallTheme.bar,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          children: [
+            // 1. Avatar — fixed 44x44
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: WhatsAppCallTheme.accentMuted,
+              ),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: false,
-                  style: const TextStyle(
-                    color: WhatsAppCallTheme.strongText,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 15,
+            const SizedBox(width: 12),
+            // 2. Name + language — takes remaining space
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.strongText,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-                if (lang != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    '${lang.flag}  Parle ${lang.label}',
+                    lang != null
+                        ? '${lang.flag}  ${lang.label}'
+                        : (profile.handle.isNotEmpty ? '@${profile.handle}' : ''),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
                     style: const TextStyle(
                       color: WhatsAppCallTheme.subtleText,
-                      fontSize: 12,
+                      fontSize: 13,
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          _actionForStatus(),
-        ],
+            const SizedBox(width: 8),
+            // 3. Action — always icon-only so the width is deterministic.
+            _actionForStatus(),
+          ],
+        ),
       ),
     );
   }
@@ -362,69 +378,82 @@ class _ProfileRow extends StatelessWidget {
     switch (status) {
       case FriendshipStatus.none:
       case FriendshipStatus.rejected:
-        return FilledButton.icon(
-          onPressed: onAdd,
-          icon: const Icon(Icons.person_add, size: 18),
-          label: const Text('Ajouter'),
-          style: FilledButton.styleFrom(
-            backgroundColor: WhatsAppCallTheme.accent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
+        return _CircleAction(
+          icon: Icons.person_add,
+          tooltip: 'Ajouter',
+          color: WhatsAppCallTheme.accent,
+          onTap: onAdd,
         );
       case FriendshipStatus.pendingOutgoing:
-        return const _StatusPill(label: 'En attente', icon: Icons.hourglass_top);
+        return _CircleAction(
+          icon: Icons.hourglass_top,
+          tooltip: 'En attente',
+          color: WhatsAppCallTheme.subtleText,
+          onTap: null,
+        );
       case FriendshipStatus.pendingIncoming:
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
+            _CircleAction(
+              icon: Icons.close,
               tooltip: 'Refuser',
-              onPressed: onReject,
-              icon: const Icon(Icons.close, color: WhatsAppCallTheme.danger),
+              color: WhatsAppCallTheme.danger,
+              onTap: onReject,
             ),
-            IconButton(
+            const SizedBox(width: 6),
+            _CircleAction(
+              icon: Icons.check,
               tooltip: 'Accepter',
-              onPressed: onAccept,
-              icon: const Icon(Icons.check, color: WhatsAppCallTheme.accent),
+              color: WhatsAppCallTheme.accent,
+              onTap: onAccept,
             ),
           ],
         );
       case FriendshipStatus.accepted:
-        return const _StatusPill(label: 'Ami', icon: Icons.check_circle);
+        return _CircleAction(
+          icon: Icons.check_circle,
+          tooltip: 'Ami',
+          color: WhatsAppCallTheme.accent,
+          onTap: null,
+        );
     }
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label, required this.icon});
-  final String label;
+class _CircleAction extends StatelessWidget {
+  const _CircleAction({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
   final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: WhatsAppCallTheme.bar,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A3942)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: WhatsAppCallTheme.subtleText),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: WhatsAppCallTheme.subtleText,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+    final disabled = onTap == null;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: disabled
+            ? WhatsAppCallTheme.bubbleIncoming
+            : color.withValues(alpha: 0.18),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(icon, size: 20, color: disabled ? WhatsAppCallTheme.subtleText : color),
           ),
-        ],
+        ),
       ),
     );
   }
 }
+
