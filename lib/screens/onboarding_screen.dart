@@ -101,8 +101,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   autocorrect: false,
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
                   decoration: const InputDecoration(
-                    labelText: 'Language you speak (BCP-47)',
-                    hintText: 'en',
+                    labelText: 'Your spoken language (BCP-47)',
+                    hintText: 'fr',
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -111,8 +111,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   autocorrect: false,
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
                   decoration: const InputDecoration(
-                    labelText: 'Language you want to hear (BCP-47)',
-                    hintText: 'fr',
+                    labelText: "The other person's language (BCP-47)",
+                    hintText: 'en',
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -200,7 +200,7 @@ class _OnboardingHeader extends StatelessWidget {
             Text(
               page == 0
                   ? 'Tell us how to call you in calls.'
-                  : 'Optional: languages for future realtime translation.',
+                  : 'These map to OpenAI Realtime later: your language vs theirs (bidirectional).',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.85),
                 fontSize: 14,
@@ -303,8 +303,8 @@ class _StepLanguages extends StatelessWidget {
             autocorrect: false,
             style: const TextStyle(color: WhatsAppCallTheme.strongText),
             decoration: const InputDecoration(
-              labelText: 'Language you speak (BCP-47)',
-              hintText: 'en',
+              labelText: 'Your spoken language (BCP-47)',
+              hintText: 'fr',
             ),
           ),
           const SizedBox(height: 16),
@@ -313,13 +313,15 @@ class _StepLanguages extends StatelessWidget {
             autocorrect: false,
             style: const TextStyle(color: WhatsAppCallTheme.strongText),
             decoration: const InputDecoration(
-              labelText: 'Language you want to hear (BCP-47)',
-              hintText: 'fr',
+              labelText: "The other person's language (BCP-47)",
+              hintText: 'en',
             ),
           ),
           const SizedBox(height: 12),
           const Text(
-            'Leave empty if you only want video calls for now. You can change this later in settings.',
+            'Example: you choose fr + en — you speak French; the other speaks English. '
+            'Later, OpenAI will translate your voice to English for them and their voice to French for you. '
+            'Leave blank if you only want plain video calls for now.',
             style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13, height: 1.4),
           ),
           const SizedBox(height: 28),

@@ -70,6 +70,9 @@ app.get('/api', (_req, res) => {
 /**
  * POST /livekit/token
  * Body: { roomName, identity, displayName?, sourceLang?, targetLang? }
+ * Participant metadata (for a future OpenAI Realtime bridge):
+ * - sourceLang: this participant's spoken language (BCP-47). Translate the remote participant's speech into this language for this participant to hear.
+ * - targetLang: the remote participant's spoken language (BCP-47). Translate this participant's speech into this language for the remote participant to hear.
  */
 app.post('/livekit/token', (req, res) => {
   try {

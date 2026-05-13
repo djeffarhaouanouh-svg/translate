@@ -203,7 +203,7 @@ class _JoinScreenState extends State<JoinScreen> {
                       iconColor: WhatsAppCallTheme.subtleText,
                       collapsedIconColor: WhatsAppCallTheme.subtleText,
                       title: const Text(
-                        'Translation (optional)',
+                        'Translation (OpenAI, later)',
                         style: TextStyle(
                           color: WhatsAppCallTheme.strongText,
                           fontWeight: FontWeight.w500,
@@ -211,7 +211,7 @@ class _JoinScreenState extends State<JoinScreen> {
                         ),
                       ),
                       subtitle: const Text(
-                        'Reserved for future realtime translation',
+                        'Your language ↔ their language for realtime speech (not active yet).',
                         style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
                       ),
                       children: [
@@ -224,8 +224,8 @@ class _JoinScreenState extends State<JoinScreen> {
                                 autocorrect: false,
                                 style: const TextStyle(color: WhatsAppCallTheme.strongText),
                                 decoration: const InputDecoration(
-                                  labelText: 'You speak (BCP-47)',
-                                  hintText: 'en',
+                                  labelText: 'Your spoken language (BCP-47)',
+                                  hintText: 'fr',
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -234,8 +234,8 @@ class _JoinScreenState extends State<JoinScreen> {
                                 autocorrect: false,
                                 style: const TextStyle(color: WhatsAppCallTheme.strongText),
                                 decoration: const InputDecoration(
-                                  labelText: 'Target language (BCP-47)',
-                                  hintText: 'fr',
+                                  labelText: "The other person's language (BCP-47)",
+                                  hintText: 'en',
                                 ),
                               ),
                             ],
