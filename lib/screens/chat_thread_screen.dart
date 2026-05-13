@@ -38,6 +38,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   List<ChatMessage> _messages = const [];
   String _myId = '';
   String _myName = '';
+  String _myLang = '';
   bool _sending = false;
   String? _error;
 
@@ -54,6 +55,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     setState(() {
       _myId = id;
       _myName = profile?.firstName.trim() ?? '';
+      _myLang = profile?.sourceLang.trim() ?? '';
     });
 
     if (!isSupabaseReady) {
@@ -106,6 +108,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         senderName: _myName.isEmpty ? 'Moi' : _myName,
         recipientId: widget.peerDeviceId,
         body: body,
+        language: _myLang,
       );
       _inputCtrl.clear();
     } catch (e) {

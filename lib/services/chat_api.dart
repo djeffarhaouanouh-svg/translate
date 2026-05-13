@@ -63,6 +63,7 @@ abstract final class ChatApi {
     required String senderName,
     required String recipientId,
     required String body,
+    required String language,
   }) async {
     await _client.from('messages').insert({
       'conversation_id': conversationId,
@@ -70,6 +71,7 @@ abstract final class ChatApi {
       'recipient': recipientId,
       'sender_name': senderName,
       'body': body,
+      'language': language,
     });
   }
 
