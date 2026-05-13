@@ -15,6 +15,10 @@ const LIVEKIT_URL = process.env.LIVEKIT_URL?.trim();
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY?.trim();
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET?.trim();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
+/** Set to `1` to enable source-language transcription (slightly more latency / cost). */
+const OPENAI_TRANSLATION_TRANSCRIBE = process.env.OPENAI_TRANSLATION_TRANSCRIBE?.trim() === '1';
+/** Set to `0` to disable input noise reduction (tiny CPU win; noisier mics). */
+const OPENAI_TRANSLATION_NOISE_REDUCTION = process.env.OPENAI_TRANSLATION_NOISE_REDUCTION?.trim() !== '0';
 const PORT = Number(process.env.PORT || 8787);
 
 const OPENAI_TRANSLATION_CLIENT_SECRETS =
@@ -192,6 +196,21 @@ app.post('/translation/realtime/session', async (req, res) => {
   }
 
   try {
+    const audioInput = {};
+    if (OPENAI_TRANSLATION_TRANSCRIBE) {
+      audioInput.transcription = { model: 'gpt-realtime-whisper' };
+    }
+    if (OPENAI_TRANSLATION_NOISE_REDUCTION) {
+      audioInput.noise_reduction = { type: 'near_field' };
+    }
+
+    const sessionPayload = {
+      model: 'gpt-realtime-translate',
+      audio: {
+        ...(Object.keys(audioInput).length > 0 ? { input: audioInput } : {}),
+        output: { language: tag },
+      },
+    };
     const r = await fetch(OPENAI_TRANSLATION_CLIENT_SECRETS, {
       method: 'POST',
       headers: {
@@ -199,16 +218,7 @@ app.post('/translation/realtime/session', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        session: {
-          model: 'gpt-realtime-translate',
-          audio: {
-            input: {
-              transcription: { model: 'gpt-realtime-whisper' },
-              noise_reduction: { type: 'near_field' },
-            },
-            output: { language: tag },
-          },
-        },
+        session: sessionPayload,
       }),
     });
     const text = await r.text();
