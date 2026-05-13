@@ -71,13 +71,16 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   Widget? buildTranslationAudioOverlay() {
     final r = _renderer;
     if (r == null) return null;
+    // In viewport (1x1 at 0,0) instead of off-screen so iOS WebKit / mobile
+    // Flutter Web cannot cull the platform view. Required for the translated
+    // audio to actually play through the system on Safari/Chrome iOS.
     return Positioned(
-      left: -20,
-      bottom: -20,
-      width: 4,
-      height: 4,
+      left: 0,
+      bottom: 0,
+      width: 1,
+      height: 1,
       child: Opacity(
-        opacity: 0.02,
+        opacity: 0.001,
         child: RTCVideoView(
           r,
           mirror: false,
