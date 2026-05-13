@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../services/chat_prefs.dart';
 import '../services/device_id.dart';
+import '../services/friendship_api.dart';
+import '../services/languages.dart';
+import '../services/profile_api.dart';
+import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
 import 'chat_thread_screen.dart';
 
-/// Chat home: list of locally-known conversations + FAB to start a new one.
-/// Messages live in Supabase; the list of "rooms I have entered" stays local
-/// because there is no auth-backed conversation membership yet.
+/// WhatsApp-style chat home: lists every accepted friend (union of followers
+/// + following). Tapping a row opens the direct-message thread, with a
+/// deterministic conversation id derived from both device ids so the two
+/// sides converge on the same room.
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -15,49 +19,101 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
-  List<ChatConversation> _conversations = const [];
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+  String _myId = '';
+  List<RemoteProfile> _friends = const [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _reload();
-    // Warm up DeviceId so the first send in a thread does not block on storage.
-    DeviceId.getOrCreate();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reload();
+    }
   }
 
   Future<void> _reload() async {
-    final list = await ChatPrefs.load();
     if (!mounted) return;
     setState(() {
-      _conversations = list;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final id = await DeviceId.getOrCreate();
+      if (!isSupabaseReady) {
+        if (!mounted) return;
+        setState(() {
+          _myId = id;
+          _friends = const [];
+          _loading = false;
+        });
+        return;
+      }
+      final followers = await FriendshipApi.fetchAcceptedPeers(
+        meId: id,
+        direction: FriendDirection.followers,
+      );
+      final following = await FriendshipApi.fetchAcceptedPeers(
+        meId: id,
+        direction: FriendDirection.following,
+      );
+      final byId = <String, RemoteProfile>{};
+      for (final p in followers) {
+        byId[p.id] = p;
+      }
+      for (final p in following) {
+        byId[p.id] = p;
+      }
+      final friends = byId.values.toList()
+        ..sort(
+          (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        );
+      if (!mounted) return;
+      setState(() {
+        _myId = id;
+        _friends = friends;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Erreur de chargement : $e';
+        _loading = false;
+      });
+    }
   }
 
-  Future<void> _openNewConversationDialog() async {
-    final created = await showDialog<ChatConversation>(
-      context: context,
-      builder: (ctx) => const _NewConversationDialog(),
-    );
-    if (created == null || !mounted) return;
-    await ChatPrefs.upsert(created);
-    await _reload();
-    if (!mounted) return;
-    _openThread(created);
+  String _conversationIdFor(String otherId) {
+    final ids = [_myId, otherId]..sort();
+    return 'dm-${ids[0]}-${ids[1]}';
   }
 
-  Future<void> _openThread(ChatConversation conv) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
+  Future<void> _openThread(RemoteProfile peer) async {
+    final convId = _conversationIdFor(peer.id);
+    final title = peer.displayName.isNotEmpty
+        ? peer.displayName
+        : (peer.handle.isNotEmpty ? '@${peer.handle}' : 'Ami');
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
         builder: (_) => ChatThreadScreen(
-          conversationId: conv.id,
-          title: conv.title,
+          conversationId: convId,
+          title: title,
         ),
       ),
     );
-    // Refresh — last activity time / unread counts will land here later.
     _reload();
   }
 
@@ -69,93 +125,139 @@ class _ChatScreenState extends State<ChatScreen> {
         title: const Text('Chat'),
         actions: [
           IconButton(
-            tooltip: 'Rechercher',
-            onPressed: () {},
-            icon: const Icon(Icons.search),
+            tooltip: 'Rafraîchir',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: WhatsAppCallTheme.accent),
-            )
-          : _conversations.isEmpty
-              ? const _EmptyConversations()
-              : _ConversationList(
-                  items: _conversations,
-                  onTap: _openThread,
-                  onLongPress: (c) async {
-                    await ChatPrefs.remove(c.id);
-                    await _reload();
-                  },
-                ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: WhatsAppCallTheme.accent,
-        foregroundColor: Colors.white,
-        onPressed: _openNewConversationDialog,
-        tooltip: 'Nouvelle conversation',
-        child: const Icon(Icons.chat),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: WhatsAppCallTheme.accent),
+      );
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          _error!,
+          style: const TextStyle(color: Color(0xFFFFAB91), height: 1.35, fontSize: 13),
+        ),
+      );
+    }
+    if (_friends.isEmpty) {
+      return const _NoFriendsEmpty();
+    }
+    return RefreshIndicator(
+      color: WhatsAppCallTheme.accent,
+      backgroundColor: WhatsAppCallTheme.bar,
+      onRefresh: _reload,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: _friends.length,
+        separatorBuilder: (_, _) => const Divider(
+          height: 1,
+          color: Color(0xFF1F2C34),
+          indent: 76,
+        ),
+        itemBuilder: (ctx, i) {
+          final p = _friends[i];
+          return _FriendChatRow(profile: p, onTap: () => _openThread(p));
+        },
       ),
     );
   }
 }
 
-class _ConversationList extends StatelessWidget {
-  const _ConversationList({
-    required this.items,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  final List<ChatConversation> items;
-  final ValueChanged<ChatConversation> onTap;
-  final ValueChanged<ChatConversation> onLongPress;
+class _FriendChatRow extends StatelessWidget {
+  const _FriendChatRow({required this.profile, required this.onTap});
+  final RemoteProfile profile;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const Divider(
-        height: 1,
-        color: Color(0xFF1F2C34),
-      ),
-      itemBuilder: (ctx, i) {
-        final c = items[i];
-        return ListTile(
-          leading: CircleAvatar(
-            radius: 22,
-            backgroundColor: WhatsAppCallTheme.bar,
-            child: Text(
-              c.title.isNotEmpty ? c.title.characters.first.toUpperCase() : '?',
-              style: const TextStyle(
-                color: WhatsAppCallTheme.strongText,
-                fontWeight: FontWeight.w600,
+    final lang = findLanguageByCode(profile.language);
+    final name = profile.displayName.isNotEmpty
+        ? profile.displayName
+        : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
+    final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: WhatsAppCallTheme.accentMuted,
+              ),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
               ),
             ),
-          ),
-          title: Text(
-            c.title,
-            style: const TextStyle(
-              color: WhatsAppCallTheme.strongText,
-              fontWeight: FontWeight.w500,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.strongText,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    lang != null
+                        ? '${lang.flag}  ${lang.label}'
+                        : 'Toucher pour discuter',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.subtleText,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          subtitle: Text(
-            'ID : ${c.id}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
-          ),
-          onTap: () => onTap(c),
-          onLongPress: () => onLongPress(c),
-        );
-      },
+            const Icon(
+              Icons.chevron_right,
+              color: WhatsAppCallTheme.subtleText,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _EmptyConversations extends StatelessWidget {
-  const _EmptyConversations();
+class _NoFriendsEmpty extends StatelessWidget {
+  const _NoFriendsEmpty();
 
   @override
   Widget build(BuildContext context) {
@@ -173,14 +275,14 @@ class _EmptyConversations extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.chat_bubble_outline,
+                Icons.people_outline,
                 color: WhatsAppCallTheme.subtleText,
                 size: 34,
               ),
             ),
             const SizedBox(height: 18),
             const Text(
-              'Aucune conversation pour le moment',
+              'Pas encore d\'amis',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: WhatsAppCallTheme.strongText,
@@ -190,102 +292,14 @@ class _EmptyConversations extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Crée une nouvelle conversation en partageant un identifiant '
-              'avec quelqu\'un. Vous verrez vos messages en temps réel.',
+              'Va dans l\'onglet Recherche pour trouver quelqu\'un par son prénom, '
+              'puis envoie une demande d\'ami pour pouvoir discuter avec lui.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: WhatsAppCallTheme.subtleText,
-                fontSize: 13,
-                height: 1.4,
-              ),
+              style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13, height: 1.4),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NewConversationDialog extends StatefulWidget {
-  const _NewConversationDialog();
-
-  @override
-  State<_NewConversationDialog> createState() => _NewConversationDialogState();
-}
-
-class _NewConversationDialogState extends State<_NewConversationDialog> {
-  final _idCtrl = TextEditingController();
-  final _titleCtrl = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _idCtrl.dispose();
-    _titleCtrl.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final id = _idCtrl.text.trim();
-    final title = _titleCtrl.text.trim();
-    if (id.isEmpty || title.isEmpty) {
-      setState(() => _error = 'Renseigne un identifiant et un nom.');
-      return;
-    }
-    if (!RegExp(r'^[a-zA-Z0-9_-]{3,64}$').hasMatch(id)) {
-      setState(() => _error =
-          'Identifiant invalide : 3-64 caractères (lettres, chiffres, _ et -).');
-      return;
-    }
-    Navigator.of(context).pop(ChatConversation(id: id, title: title));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: WhatsAppCallTheme.bar,
-      title: const Text(
-        'Nouvelle conversation',
-        style: TextStyle(color: WhatsAppCallTheme.strongText),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _idCtrl,
-            autocorrect: false,
-            style: const TextStyle(color: WhatsAppCallTheme.strongText),
-            decoration: const InputDecoration(
-              labelText: 'Identifiant de la conversation',
-              hintText: 'ex. diner-avec-sam',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _titleCtrl,
-            textCapitalization: TextCapitalization.words,
-            style: const TextStyle(color: WhatsAppCallTheme.strongText),
-            decoration: const InputDecoration(
-              labelText: 'Nom affiché',
-              hintText: 'ex. Sam',
-            ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: Color(0xFFFFAB91), fontSize: 12)),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Créer'),
-        ),
-      ],
     );
   }
 }
