@@ -298,7 +298,11 @@ class _ProfileRow extends StatelessWidget {
         ? profile.firstName.characters.first.toUpperCase()
         : '?';
 
-    return Padding(
+    final name = profile.firstName.isNotEmpty
+        ? profile.firstName
+        : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
+    return Container(
+      constraints: const BoxConstraints(minHeight: 72),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -320,32 +324,24 @@ class _ProfileRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        profile.firstName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: WhatsAppCallTheme.strongText,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                    if (lang != null) ...[
-                      const SizedBox(width: 8),
-                      Text(lang.flag, style: const TextStyle(fontSize: 16)),
-                    ],
-                  ],
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: const TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
                 ),
                 if (lang != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    'Parle ${lang.label}',
+                    '${lang.flag}  Parle ${lang.label}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    softWrap: false,
                     style: const TextStyle(
                       color: WhatsAppCallTheme.subtleText,
                       fontSize: 12,
