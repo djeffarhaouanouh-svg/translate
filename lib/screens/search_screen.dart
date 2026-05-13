@@ -19,20 +19,37 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver {
   final _queryCtrl = TextEditingController();
   Timer? _debounce;
 
   String _myId = '';
   List<RemoteProfile> _results = const [];
   List<Friendship> _myFriendships = const [];
+  List<IncomingFriendRequest> _incoming = const [];
   bool _searching = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshFriendships();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _debounce?.cancel();
+    _queryCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -46,13 +63,21 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_myId.isEmpty) return;
     try {
       final list = await FriendshipApi.fetchMine(_myId);
+      final incoming =
+          await FriendshipApi.fetchIncomingPendingWithProfiles(_myId);
       if (!mounted) return;
-      setState(() => _myFriendships = list);
+      setState(() {
+        _myFriendships = list;
+        _incoming = incoming;
+      });
+      return;
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Impossible de charger les amitiés: $e');
+      return;
     }
   }
+
 
   void _onQueryChanged(String value) {
     _debounce?.cancel();
@@ -115,17 +140,19 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   @override
-  void dispose() {
-    _debounce?.cancel();
-    _queryCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
-      appBar: AppBar(title: const Text('Rechercher')),
+      appBar: AppBar(
+        title: const Text('Rechercher'),
+        actions: [
+          IconButton(
+            tooltip: 'Rafraîchir',
+            onPressed: _refreshFriendships,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           _SearchField(controller: _queryCtrl, onChanged: _onQueryChanged),
@@ -136,6 +163,12 @@ class _SearchScreenState extends State<SearchScreen> {
                 _error!,
                 style: const TextStyle(color: Color(0xFFFFAB91), fontSize: 12, height: 1.3),
               ),
+            ),
+          if (_incoming.isNotEmpty)
+            _IncomingRequestsSection(
+              requests: _incoming,
+              onAccept: _accept,
+              onReject: _reject,
             ),
           Expanded(child: _buildBody()),
         ],
@@ -269,6 +302,158 @@ class _SearchIntro extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _IncomingRequestsSection extends StatelessWidget {
+  const _IncomingRequestsSection({
+    required this.requests,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final List<IncomingFriendRequest> requests;
+  final ValueChanged<Friendship> onAccept;
+  final ValueChanged<Friendship> onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      decoration: BoxDecoration(
+        color: WhatsAppCallTheme.bar,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: WhatsAppCallTheme.accent.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.notifications_active,
+                  size: 18,
+                  color: WhatsAppCallTheme.accent,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Invitations reçues (${requests.length})',
+                  style: const TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final req in requests)
+            _IncomingRequestTile(
+              request: req,
+              onAccept: () => onAccept(req.friendship),
+              onReject: () => onReject(req.friendship),
+            ),
+          const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+}
+
+class _IncomingRequestTile extends StatelessWidget {
+  const _IncomingRequestTile({
+    required this.request,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final IncomingFriendRequest request;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = request.requester;
+    final name = p?.displayName.isNotEmpty == true
+        ? p!.displayName
+        : (p?.handle.isNotEmpty == true ? '@${p!.handle}' : 'Inconnu');
+    final initial =
+        name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
+    final lang = p != null ? findLanguageByCode(p.language) : null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: WhatsAppCallTheme.accentMuted,
+            ),
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: const TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  lang != null
+                      ? '${lang.flag}  ${lang.label} · veut être ami'
+                      : 'veut être ami',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: const TextStyle(
+                    color: WhatsAppCallTheme.subtleText,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _CircleAction(
+            icon: Icons.close,
+            tooltip: 'Refuser',
+            color: WhatsAppCallTheme.danger,
+            onTap: onReject,
+          ),
+          const SizedBox(width: 6),
+          _CircleAction(
+            icon: Icons.check,
+            tooltip: 'Accepter',
+            color: WhatsAppCallTheme.accent,
+            onTap: onAccept,
+          ),
+        ],
       ),
     );
   }

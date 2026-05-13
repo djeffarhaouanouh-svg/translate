@@ -1,7 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'profile_api.dart';
 import 'supabase_service.dart';
+
+class IncomingFriendRequest {
+  const IncomingFriendRequest({required this.friendship, this.requester});
+  final Friendship friendship;
+  final RemoteProfile? requester;
+}
 
 enum FriendshipStatus { none, pendingOutgoing, pendingIncoming, accepted, rejected }
 
@@ -37,6 +44,35 @@ class Friendship {
 
 abstract final class FriendshipApi {
   static SupabaseClient get _c => Supabase.instance.client;
+
+  /// Pending invitations addressed TO me, hydrated with the requester's
+  /// profile so the UI can render avatar + name without a second query.
+  static Future<List<IncomingFriendRequest>> fetchIncomingPendingWithProfiles(
+    String meId,
+  ) async {
+    if (!isSupabaseReady || meId.isEmpty) return const [];
+    final rows = await _c
+        .from('friendships')
+        .select()
+        .eq('addressee', meId)
+        .eq('status', 'pending');
+    final friendships = (rows as List)
+        .map((r) => Friendship.fromMap(Map<String, dynamic>.from(r as Map)))
+        .toList(growable: false);
+    if (friendships.isEmpty) return const [];
+
+    final requesterIds = friendships
+        .map((f) => f.requester)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final profiles = await ProfileApi.fetchByIds(requesterIds);
+    final byId = {for (final p in profiles) p.id: p};
+    return [
+      for (final f in friendships)
+        IncomingFriendRequest(friendship: f, requester: byId[f.requester]),
+    ];
+  }
 
   /// Counts for the profile screen.
   /// - `followers`  = accepted friendships where I am the addressee.
