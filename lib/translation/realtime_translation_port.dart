@@ -3,6 +3,17 @@ import 'package:livekit_client/livekit_client.dart';
 
 import 'translation_route.dart';
 
+/// UX phases for translation (perceived responsiveness, not lip-sync).
+enum TranslationFeedbackPhase {
+  hidden,
+  /// Room ready, waiting for remote / pipeline idle.
+  standby,
+  /// Fetching token, SDP, or WebRTC connecting.
+  working,
+  /// OpenAI path connected and receiving media.
+  live,
+}
+
 /// Abstraction for bidirectional realtime speech translation.
 ///
 /// Next steps (server-side recommended):
@@ -23,6 +34,12 @@ abstract class RealtimeTranslationPort {
 
   /// e.g. tiny [RTCVideoView] for translated remote audio (OpenAI path).
   Widget? buildTranslationAudioOverlay() => null;
+
+  /// Shown in-call for immediate feedback (progress, chips).
+  TranslationFeedbackPhase get translationFeedbackPhase => TranslationFeedbackPhase.hidden;
+
+  /// LiveKit active speaker list includes a remote participant (for a subtle pulse).
+  bool get translationRemoteVoiceHot => false;
 }
 
 /// Default: no processing; keeps call path simple until you add an adapter.
@@ -42,4 +59,10 @@ class NoOpRealtimeTranslation implements RealtimeTranslationPort {
 
   @override
   Widget? buildTranslationAudioOverlay() => null;
+
+  @override
+  TranslationFeedbackPhase get translationFeedbackPhase => TranslationFeedbackPhase.hidden;
+
+  @override
+  bool get translationRemoteVoiceHot => false;
 }

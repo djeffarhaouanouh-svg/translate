@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../translation/translation_route.dart';
+import '../widgets/translation_feedback_ribbon.dart';
 
 class CallScreen extends StatefulWidget {
   const CallScreen({
@@ -409,6 +410,22 @@ class _CallScreenState extends State<CallScreen> {
                     ),
                   ),
                 ),
+                if (widget.translation.translationListenable != null)
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    top: MediaQuery.paddingOf(context).top + 40,
+                    child: ListenableBuilder(
+                      listenable: widget.translation.translationListenable!,
+                      builder: (context, _) {
+                        return TranslationFeedbackRibbon(
+                          phase: widget.translation.translationFeedbackPhase,
+                          remoteHot: widget.translation.translationRemoteVoiceHot,
+                          remoteParticipantCount: remoteCount,
+                        );
+                      },
+                    ),
+                  ),
                 if (peerName.isNotEmpty && remote != null)
                   Positioned(
                     left: 16,

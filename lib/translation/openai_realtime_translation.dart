@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -30,9 +31,33 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   Timer? _refreshTimer;
   bool _busy = false;
   DateTime? _lastConnectionDropSchedule;
+  bool _remoteVoiceHot = false;
+  bool _wasPcConnected = false;
 
   @override
   Listenable? get translationListenable => this;
+
+  @override
+  TranslationFeedbackPhase get translationFeedbackPhase {
+    if (_room == null || _route == null || !_route!.isConfigured) {
+      return TranslationFeedbackPhase.hidden;
+    }
+    final pc = _pc;
+    if (pc != null) {
+      final cs = pc.connectionState ?? RTCPeerConnectionState.RTCPeerConnectionStateNew;
+      if (cs == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        return TranslationFeedbackPhase.live;
+      }
+      return TranslationFeedbackPhase.working;
+    }
+    if (_busy) {
+      return TranslationFeedbackPhase.working;
+    }
+    return TranslationFeedbackPhase.standby;
+  }
+
+  @override
+  bool get translationRemoteVoiceHot => _remoteVoiceHot;
 
   @override
   Widget? buildTranslationAudioOverlay() {
@@ -100,22 +125,37 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   }
 
   void _onPcConnectionState(RTCPeerConnectionState state) {
-    if (state != RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-      return;
+    final nowConnected = state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
+    if (nowConnected && !_wasPcConnected && !kIsWeb) {
+      HapticFeedback.lightImpact();
     }
-    if (_room == null) return;
-    final now = DateTime.now();
-    if (_lastConnectionDropSchedule != null &&
-        now.difference(_lastConnectionDropSchedule!) < const Duration(seconds: 3)) {
-      return;
+    _wasPcConnected = nowConnected;
+    notifyListeners();
+
+    if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+      if (_room == null) return;
+      final now = DateTime.now();
+      if (_lastConnectionDropSchedule != null &&
+          now.difference(_lastConnectionDropSchedule!) < const Duration(seconds: 3)) {
+        return;
+      }
+      _lastConnectionDropSchedule = now;
+      _scheduleNextRefreshRaw(const Duration(seconds: 2));
     }
-    _lastConnectionDropSchedule = now;
-    _scheduleNextRefreshRaw(const Duration(seconds: 2));
+  }
+
+  void _onActiveSpeakersChanged(ActiveSpeakersChangedEvent e) {
+    final hot = e.speakers.any((p) => p is RemoteParticipant);
+    if (hot != _remoteVoiceHot) {
+      _remoteVoiceHot = hot;
+      notifyListeners();
+    }
   }
 
   Future<void> _stopMedia() async {
     final pc = _pc;
     _pc = null;
+    _wasPcConnected = false;
     if (pc != null) {
       try {
         pc.onConnectionState = null;
@@ -316,7 +356,10 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
     _listener = room.createListener()
       ..on<TrackSubscribedEvent>(_onTrackSubscribed)
-      ..on<TrackUnsubscribedEvent>(_onTrackUnsubscribed);
+      ..on<TrackUnsubscribedEvent>(_onTrackUnsubscribed)
+      ..on<ActiveSpeakersChangedEvent>(_onActiveSpeakersChanged);
+
+    notifyListeners();
 
     for (final p in room.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
@@ -347,6 +390,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     _cancelScheduledRefresh();
     _cachedRemote = null;
     _boundPublicationSid = null;
+    _remoteVoiceHot = false;
     await _stopMedia();
   }
 
@@ -380,6 +424,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     _cancelScheduledRefresh();
     _cachedRemote = null;
     _boundPublicationSid = null;
+    _remoteVoiceHot = false;
     await _stopMedia();
   }
 
