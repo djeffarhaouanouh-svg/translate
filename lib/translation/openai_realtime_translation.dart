@@ -13,6 +13,14 @@ import 'translation_route.dart';
 /// Listens to the **remote** LiveKit microphone, runs OpenAI **gpt-realtime-translate**
 /// (WebRTC), and plays translated audio locally in your language ([TranslationRoute.sourceBcp47]).
 ///
+/// Only [TrackSource.microphone] (or unknown-labeled mic) is sent to OpenAI — never
+/// [TrackSource.screenShareAudio], so tab/system capture is not translated (avoids re-feeding
+/// TTS or call audio published as screen-audio).
+///
+/// Translated audio plays on a **second** WebRTC connection; OS echo cancellation may not
+/// fully remove that playback from **your** mic. Prefer headphones / lower speaker volume
+/// so the remote party does not send leaked translation back into this pipeline.
+///
 /// Renews the OpenAI side before the ephemeral credential expires and retries on failure.
 class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTranslationPort {
   Room? _room;
@@ -152,11 +160,60 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       for (final pub in p.audioTrackPublications) {
         if (pub.sid == sid) {
           final t = pub.track;
-          if (t is RemoteAudioTrack) return t;
+          if (t is RemoteAudioTrack && _eligibleRemoteAudioForTranslation(t)) return t;
         }
       }
     }
     return null;
+  }
+
+  /// Never use screen-share / system-capture audio for speech translation.
+  static bool _eligibleRemoteAudioForTranslation(RemoteAudioTrack t) =>
+      t.source != TrackSource.screenShareAudio;
+
+  /// Prefer the remote **microphone** so we do not translate screen/tab audio (which can
+  /// include our own translated output played on speakers elsewhere in the graph).
+  static ({RemoteAudioTrack track, String sid})? _pickTranslationRemoteTrack(Room room) {
+    RemoteAudioTrack? fallback;
+    String? fallbackSid;
+
+    for (final p in room.remoteParticipants.values) {
+      for (final pub in p.audioTrackPublications) {
+        final t = pub.track;
+        if (t is! RemoteAudioTrack) continue;
+        if (!_eligibleRemoteAudioForTranslation(t)) continue;
+        if (t.source == TrackSource.microphone) {
+          return (track: t, sid: pub.sid);
+        }
+        if (fallback == null) {
+          fallback = t;
+          fallbackSid = pub.sid;
+        }
+      }
+    }
+
+    if (fallback != null && fallbackSid != null) {
+      return (track: fallback, sid: fallbackSid);
+    }
+    return null;
+  }
+
+  void _maybeUpgradeTranslationBinding() {
+    final room = _room;
+    final route = _route;
+    if (room == null || route == null || !route.isConfigured) return;
+
+    final pick = _pickTranslationRemoteTrack(room);
+    if (pick == null) {
+      if (_boundPublicationSid != null || _pc != null) {
+        unawaited(_onRemoteTrackEnded());
+      }
+      return;
+    }
+
+    if (_busy) return;
+    if (_pc != null && _boundPublicationSid == pick.sid) return;
+    unawaited(_bindRemoteAudio(pick.track, pick.sid));
   }
 
   void _onPcConnectionState(RTCPeerConnectionState state) {
@@ -411,28 +468,20 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
     _startWatchdog();
 
-    for (final p in room.remoteParticipants.values) {
-      for (final pub in p.audioTrackPublications) {
-        final t = pub.track;
-        if (t is RemoteAudioTrack) {
-          unawaited(_bindRemoteAudio(t, pub.sid));
-          return;
-        }
-      }
-    }
+    _maybeUpgradeTranslationBinding();
   }
 
   void _onTrackSubscribed(TrackSubscribedEvent e) {
     final t = e.track;
-    if (t is RemoteAudioTrack) {
-      unawaited(_bindRemoteAudio(t, e.publication.sid));
+    if (t is RemoteAudioTrack && _eligibleRemoteAudioForTranslation(t)) {
+      _maybeUpgradeTranslationBinding();
     }
   }
 
   void _onTrackUnsubscribed(TrackUnsubscribedEvent e) {
-    final sid = e.publication.sid;
-    if (_boundPublicationSid != null && sid == _boundPublicationSid) {
-      unawaited(_onRemoteTrackEnded());
+    final t = e.track;
+    if (t is RemoteAudioTrack) {
+      _maybeUpgradeTranslationBinding();
     }
   }
 
@@ -449,6 +498,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final roomRef = _room;
     final route = _route;
     if (roomRef == null || route == null || !route.isConfigured) return;
+    if (!_eligibleRemoteAudioForTranslation(remote)) return;
     if (_busy) return;
     if (_pc != null && _boundPublicationSid == publicationSid) return;
 
