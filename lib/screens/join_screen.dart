@@ -211,7 +211,7 @@ class _JoinScreenState extends State<JoinScreen> {
                       iconColor: WhatsAppCallTheme.subtleText,
                       collapsedIconColor: WhatsAppCallTheme.subtleText,
                       title: const Text(
-                        'Translation (OpenAI, later)',
+                        'Translation (OpenAI Realtime)',
                         style: TextStyle(
                           color: WhatsAppCallTheme.strongText,
                           fontWeight: FontWeight.w500,
@@ -219,7 +219,8 @@ class _JoinScreenState extends State<JoinScreen> {
                         ),
                       ),
                       subtitle: const Text(
-                        'Your language ↔ their language for realtime speech (not active yet).',
+                        'You hear the other person translated into “Your spoken language”. '
+                        'They need the inverse on their device. Web: best experience.',
                         style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
                       ),
                       children: [

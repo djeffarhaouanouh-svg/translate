@@ -4,6 +4,7 @@ import 'screens/join_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/user_prefs.dart';
 import 'theme/whatsapp_call_theme.dart';
+import 'translation/openai_realtime_translation.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,11 +21,19 @@ class LiveKitTranslateApp extends StatefulWidget {
 class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   bool _loading = true;
   bool _needsOnboarding = false;
+  late final OpenAiRealtimeTranslation _translation;
 
   @override
   void initState() {
     super.initState();
+    _translation = OpenAiRealtimeTranslation();
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    _translation.dispose();
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -53,7 +62,7 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
               ? OnboardingScreen(
                   onCompleted: () => setState(() => _needsOnboarding = false),
                 )
-              : const JoinScreen(),
+              : JoinScreen(translation: _translation),
     );
   }
 }

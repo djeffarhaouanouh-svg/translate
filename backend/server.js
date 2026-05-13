@@ -14,7 +14,12 @@ dotenv.config();
 const LIVEKIT_URL = process.env.LIVEKIT_URL?.trim();
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY?.trim();
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET?.trim();
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const PORT = Number(process.env.PORT || 8787);
+
+const OPENAI_TRANSLATION_CLIENT_SECRETS =
+  'https://api.openai.com/v1/realtime/translations/client_secrets';
+const OPENAI_TRANSLATION_CALLS = 'https://api.openai.com/v1/realtime/translations/calls';
 
 const webPath = path.join(__dirname, 'web');
 const webIndex = path.join(webPath, 'index.html');
@@ -28,6 +33,23 @@ function assertEnv() {
   if (missing.length) {
     throw new Error(`Missing env: ${missing.join(', ')}`);
   }
+}
+
+function assertOpenAI() {
+  if (!OPENAI_API_KEY) {
+    throw new Error('Missing OPENAI_API_KEY');
+  }
+}
+
+function primaryLanguageTag(bcp47) {
+  const s = typeof bcp47 === 'string' ? bcp47.trim().toLowerCase() : '';
+  if (!s) return '';
+  const i = s.indexOf('-');
+  return i === -1 ? s : s.slice(0, i);
+}
+
+function isReasonableLanguageTag(tag) {
+  return typeof tag === 'string' && /^[a-z]{2,3}(-[a-z0-9]{1,8})?$/.test(tag);
 }
 
 const ROOM_RE = /^[a-zA-Z0-9_-]{3,64}$/;
@@ -49,6 +71,38 @@ function sanitizeIdentity(id) {
 
 const app = express();
 app.use(cors());
+
+// Raw SDP body (not JSON) — must run before express.json().
+app.post(
+  '/translation/realtime/calls',
+  express.text({ limit: '1mb', type: '*/*' }),
+  async (req, res) => {
+    const auth = req.headers.authorization;
+    const m = typeof auth === 'string' ? /^Bearer\s+(.+)$/i.exec(auth.trim()) : null;
+    const clientSecret = m ? m[1] : '';
+    const sdpOffer = typeof req.body === 'string' ? req.body : '';
+    if (!clientSecret || !sdpOffer.trim()) {
+      return res.status(400).json({ error: 'missing_client_secret_or_sdp' });
+    }
+    try {
+      const r = await fetch(OPENAI_TRANSLATION_CALLS, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${clientSecret}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: sdpOffer,
+      });
+      const answer = await r.text();
+      return res.status(r.status).type('application/sdp').send(answer);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('translation calls proxy', e);
+      return res.status(502).json({ error: 'openai_unreachable' });
+    }
+  },
+);
+
 app.use(express.json({ limit: '16kb' }));
 
 app.get('/health', (_req, res) => {
@@ -62,7 +116,8 @@ app.get('/api', (_req, res) => {
     routes: {
       health: 'GET /health',
       livekitToken: 'POST /livekit/token',
-      translationPlaceholder: 'POST /translation/realtime/session',
+      translationSession: 'POST /translation/realtime/session',
+      translationCalls: 'POST /translation/realtime/calls (SDP relay, Authorization: Bearer ephemeral)',
     },
   });
 });
@@ -118,11 +173,57 @@ app.post('/livekit/token', async (req, res) => {
   });
 });
 
-app.post('/translation/realtime/session', (_req, res) => {
-  return res.status(501).json({
-    error: 'not_implemented',
-    hint: 'Add OpenAI Realtime session creation here; keep API keys on the server.',
-  });
+/**
+ * POST /translation/realtime/session
+ * Body: { outputLanguage: "fr" }  (BCP-47; primary subtag is used)
+ * Proxies OpenAI Realtime Translation client_secrets (short-lived key for WebRTC).
+ */
+app.post('/translation/realtime/session', async (req, res) => {
+  try {
+    assertOpenAI();
+  } catch (e) {
+    return res.status(500).json({ error: 'openai_misconfigured' });
+  }
+
+  const raw = req.body?.outputLanguage;
+  const tag = primaryLanguageTag(raw);
+  if (!tag || !isReasonableLanguageTag(tag)) {
+    return res.status(400).json({ error: 'invalid_output_language' });
+  }
+
+  try {
+    const r = await fetch(OPENAI_TRANSLATION_CLIENT_SECRETS, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        session: {
+          model: 'gpt-realtime-translate',
+          audio: {
+            input: {
+              transcription: { model: 'gpt-realtime-whisper' },
+              noise_reduction: { type: 'near_field' },
+            },
+            output: { language: tag },
+          },
+        },
+      }),
+    });
+    const text = await r.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (_) {
+      return res.status(502).json({ error: 'openai_bad_response', body: text.slice(0, 200) });
+    }
+    return res.status(r.status).json(parsed);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('translation session', e);
+    return res.status(502).json({ error: 'openai_unreachable' });
+  }
 });
 
 if (hasWebUi) {
@@ -152,6 +253,8 @@ if (hasWebUi) {
           routes: {
             health: 'GET /health',
             livekitToken: 'POST /livekit/token',
+            translationSession: 'POST /translation/realtime/session',
+            translationCalls: 'POST /translation/realtime/calls',
           },
         },
         null,

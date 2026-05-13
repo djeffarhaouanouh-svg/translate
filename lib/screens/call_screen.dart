@@ -465,6 +465,14 @@ class _CallScreenState extends State<CallScreen> {
                       ),
                     ),
                   ),
+                if (widget.translation.translationListenable != null)
+                  ListenableBuilder(
+                    listenable: widget.translation.translationListenable!,
+                    builder: (context, _) {
+                      final overlay = widget.translation.buildTranslationAudioOverlay();
+                      return overlay ?? const SizedBox.shrink();
+                    },
+                  ),
                 Positioned(
                   left: 0,
                   right: 0,

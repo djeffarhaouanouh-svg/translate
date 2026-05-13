@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import 'translation_route.dart';
@@ -15,6 +16,13 @@ abstract class RealtimeTranslationPort {
   });
 
   Future<void> detach();
+
+  /// When non-null, widgets can wrap [buildTranslationAudioOverlay] in a
+  /// [ListenableBuilder] so hidden WebRTC playback rebuilds.
+  Listenable? get translationListenable => null;
+
+  /// e.g. tiny [RTCVideoView] for translated remote audio (OpenAI path).
+  Widget? buildTranslationAudioOverlay() => null;
 }
 
 /// Default: no processing; keeps call path simple until you add an adapter.
@@ -28,4 +36,10 @@ class NoOpRealtimeTranslation implements RealtimeTranslationPort {
 
   @override
   Future<void> detach() async {}
+
+  @override
+  Listenable? get translationListenable => null;
+
+  @override
+  Widget? buildTranslationAudioOverlay() => null;
 }
