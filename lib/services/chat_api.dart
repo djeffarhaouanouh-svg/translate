@@ -75,17 +75,24 @@ abstract final class ChatApi {
     });
   }
 
-  /// Live stream of all messages in a conversation, ordered chronologically.
-  /// Re-emits the entire list on every insert; this is fine for typical chat
-  /// scrollback sizes (a few hundred rows).
+  /// Live stream of all messages in a conversation, ordered chronologically
+  /// ascending (oldest first, newest last) so the UI can render them
+  /// top-to-bottom in chronological order. Re-emits the entire list on
+  /// every insert; fine for typical chat scrollback sizes.
   static Stream<List<ChatMessage>> subscribeMessages(String conversationId) {
     return _client
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('conversation_id', conversationId)
-        .order('created_at')
-        .map((rows) => rows
-            .map((m) => ChatMessage.fromMap(Map<String, dynamic>.from(m)))
-            .toList(growable: false));
+        .order('created_at', ascending: true)
+        .map((rows) {
+          final list = rows
+              .map((m) => ChatMessage.fromMap(Map<String, dynamic>.from(m)))
+              .toList();
+          // Defensive client-side sort in case the stream ignored the order
+          // hint (some Supabase realtime builds default to descending).
+          list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          return List<ChatMessage>.unmodifiable(list);
+        });
   }
 }
