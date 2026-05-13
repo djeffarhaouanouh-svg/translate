@@ -22,7 +22,10 @@ class ChatMessage {
     return ChatMessage(
       id: m['id']?.toString() ?? '',
       conversationId: m['conversation_id']?.toString() ?? '',
-      senderId: m['sender_id']?.toString() ?? '',
+      // Read either `sender` (existing column on user's table) or
+      // `sender_id` (the name my earlier migration assumed) — whichever
+      // is populated.
+      senderId: (m['sender'] ?? m['sender_id'])?.toString() ?? '',
       senderName: m['sender_name']?.toString() ?? '',
       body: m['body']?.toString() ?? '',
       createdAt: created is String
@@ -60,9 +63,14 @@ abstract final class ChatApi {
     required String senderName,
     required String body,
   }) async {
+    // Write to `sender` (the existing NOT-NULL column on the deployed
+    // table). `sender_id` is kept as a duplicate write for forward-compat:
+    // if it does not exist Postgres ignores extra fields? No — it errors.
+    // So write only the canonical column name. If user's schema later
+    // renames it, adjust here.
     await _client.from('messages').insert({
       'conversation_id': conversationId,
-      'sender_id': senderId,
+      'sender': senderId,
       'sender_name': senderName,
       'body': body,
     });
