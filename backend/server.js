@@ -19,6 +19,29 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const OPENAI_TRANSLATION_TRANSCRIBE = process.env.OPENAI_TRANSLATION_TRANSCRIBE?.trim() === '1';
 /** Set to `0` to disable input noise reduction (tiny CPU win; noisier mics). */
 const OPENAI_TRANSLATION_NOISE_REDUCTION = process.env.OPENAI_TRANSLATION_NOISE_REDUCTION?.trim() !== '0';
+/**
+ * OpenAI server VAD threshold (0..1). Lower = more sensitive (whispers,
+ * quiet speech). OpenAI's default is ~0.5. Unset → we omit the
+ * turn_detection block entirely so OpenAI uses its own defaults
+ * (current behavior). Set to e.g. 0.2 to make whispers trigger.
+ */
+const OPENAI_TRANSLATION_VAD_THRESHOLD = (() => {
+  const raw = process.env.OPENAI_TRANSLATION_VAD_THRESHOLD;
+  if (raw === undefined || raw.trim() === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1) return null;
+  return n;
+})();
+/** Padding (ms) of audio before detected speech that is forwarded for translation. */
+const OPENAI_TRANSLATION_VAD_PREFIX_MS = (() => {
+  const n = Number(process.env.OPENAI_TRANSLATION_VAD_PREFIX_MS);
+  return Number.isFinite(n) && n >= 0 ? n : 300;
+})();
+/** Silence (ms) after speech before OpenAI commits the utterance. */
+const OPENAI_TRANSLATION_VAD_SILENCE_MS = (() => {
+  const n = Number(process.env.OPENAI_TRANSLATION_VAD_SILENCE_MS);
+  return Number.isFinite(n) && n >= 0 ? n : 400;
+})();
 const PORT = Number(process.env.PORT || 8787);
 
 const OPENAI_TRANSLATION_CLIENT_SECRETS =
@@ -202,6 +225,14 @@ app.post('/translation/realtime/session', async (req, res) => {
     }
     if (OPENAI_TRANSLATION_NOISE_REDUCTION) {
       audioInput.noise_reduction = { type: 'near_field' };
+    }
+    if (OPENAI_TRANSLATION_VAD_THRESHOLD !== null) {
+      audioInput.turn_detection = {
+        type: 'server_vad',
+        threshold: OPENAI_TRANSLATION_VAD_THRESHOLD,
+        prefix_padding_ms: OPENAI_TRANSLATION_VAD_PREFIX_MS,
+        silence_duration_ms: OPENAI_TRANSLATION_VAD_SILENCE_MS,
+      };
     }
 
     const sessionPayload = {
