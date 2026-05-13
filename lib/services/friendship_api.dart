@@ -146,10 +146,12 @@ abstract final class FriendshipApi {
         .toList(growable: false);
   }
 
-  /// Send a friend / follow request from [meId] to [peerId]. Idempotent only
-  /// on the SAME direction — a row in the reverse direction does not block
-  /// creation, so "S'abonner en retour" can mint the B→A row even when an
-  /// A→B row already exists.
+  /// Send a follow request from [meId] to [peerId]. Idempotent on the same
+  /// direction. If [peerId] already has a row pointing at [meId] (i.e. they
+  /// came first), this is treated as a "follow back" and the new row lands
+  /// with status='accepted' directly — no second approval needed. Any
+  /// still-pending reverse row is flipped to accepted at the same time, so
+  /// both sides converge to the mutual state in one tap.
   static Future<Friendship?> sendRequest({
     required String meId,
     required String peerId,
@@ -157,25 +159,56 @@ abstract final class FriendshipApi {
     if (!isSupabaseReady) return null;
     if (meId.isEmpty || peerId.isEmpty || meId == peerId) return null;
 
-    final existing = await _c
+    // 1. Same-direction row → idempotent.
+    final sameDir = await _c
         .from('friendships')
         .select()
         .eq('requester', meId)
         .eq('addressee', peerId)
         .limit(1)
         .maybeSingle();
-    if (existing != null) {
-      return Friendship.fromMap(Map<String, dynamic>.from(existing));
+    if (sameDir != null) {
+      return Friendship.fromMap(Map<String, dynamic>.from(sameDir));
+    }
+
+    // 2. Reverse row → peer already follows me; auto-accept on this side and
+    //    upgrade their row to accepted if still pending.
+    final reverse = await _c
+        .from('friendships')
+        .select()
+        .eq('requester', peerId)
+        .eq('addressee', meId)
+        .limit(1)
+        .maybeSingle();
+    final autoAccept = reverse != null;
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    if (reverse != null) {
+      final reverseFs =
+          Friendship.fromMap(Map<String, dynamic>.from(reverse));
+      if (reverseFs.status == 'pending') {
+        try {
+          await _c.from('friendships').update({
+            'status': 'accepted',
+            'responded_at': nowIso,
+          }).eq('id', reverseFs.id);
+        } catch (e) {
+          debugPrint('FriendshipApi.sendRequest reverse-accept failed: $e');
+        }
+      }
     }
 
     try {
+      final payload = <String, dynamic>{
+        'requester': meId,
+        'addressee': peerId,
+        'status': autoAccept ? 'accepted' : 'pending',
+      };
+      if (autoAccept) {
+        payload['responded_at'] = nowIso;
+      }
       final inserted = await _c
           .from('friendships')
-          .insert({
-            'requester': meId,
-            'addressee': peerId,
-            'status': 'pending',
-          })
+          .insert(payload)
           .select()
           .single();
       return Friendship.fromMap(Map<String, dynamic>.from(inserted));
