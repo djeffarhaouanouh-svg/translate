@@ -199,11 +199,6 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         IconButton(
-          tooltip: 'Appel vidéo',
-          onPressed: () {},
-          icon: const Icon(Icons.videocam_outlined),
-        ),
-        IconButton(
           tooltip: 'Appel vocal',
           onPressed: () {},
           icon: const Icon(Icons.call_outlined),
