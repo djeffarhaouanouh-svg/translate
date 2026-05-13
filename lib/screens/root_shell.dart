@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
+import 'chat_screen.dart';
 import 'join_screen.dart';
 
 /// Bottom-nav host for the app. The existing join flow lives at the centered
@@ -22,7 +23,7 @@ class _RootShellState extends State<RootShell> {
   late final List<Widget> _pages = <Widget>[
     const _PlaceholderTab(title: 'Onglet 1'),
     JoinScreen(translation: widget.translation),
-    const _PlaceholderTab(title: 'Onglet 2'),
+    const ChatScreen(),
     const _PlaceholderTab(title: 'Onglet 3'),
   ];
 
@@ -38,9 +39,9 @@ class _RootShellState extends State<RootShell> {
       label: 'Appel',
     ),
     NavigationDestination(
-      icon: Icon(Icons.circle_outlined),
-      selectedIcon: Icon(Icons.circle),
-      label: 'Onglet 2',
+      icon: Icon(Icons.chat_bubble_outline),
+      selectedIcon: Icon(Icons.chat_bubble),
+      label: 'Chat',
     ),
     NavigationDestination(
       icon: Icon(Icons.circle_outlined),
