@@ -60,6 +60,25 @@ Map<String, dynamic> _decodeObjectMap(String body) {
   throw FormatException('response is not a JSON object');
 }
 
+/// Extract [expires_at] from OpenAI `client_secrets` response (seconds or ms since epoch).
+DateTime? pickSessionExpiresAt(Map<String, dynamic> j) {
+  num? n;
+  final cs = j['client_secret'];
+  if (cs is Map && cs['expires_at'] != null) {
+    final v = cs['expires_at'];
+    if (v is num) n = v;
+  }
+  if (n == null && j['expires_at'] is num) {
+    n = j['expires_at'] as num;
+  }
+  if (n == null) return null;
+  final v = n.toDouble();
+  if (v > 1e12) {
+    return DateTime.fromMillisecondsSinceEpoch(v.toInt());
+  }
+  return DateTime.fromMillisecondsSinceEpoch((v * 1000).toInt());
+}
+
 /// Extract ephemeral client secret from OpenAI `client_secrets` JSON (shapes vary).
 String? pickClientSecret(Map<String, dynamic> j) {
   final cs = j['client_secret'];
