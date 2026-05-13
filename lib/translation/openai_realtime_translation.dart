@@ -292,7 +292,14 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final route = _route;
     if (route == null || !route.isConfigured) return;
 
-    final session = await fetchTranslationSession(outputLanguage: route.sourceBcp47);
+    // Pass `targetBcp47` (the remote speaker's language) as input language —
+    // the backend forwards it as `audio.input.language` only if the env gate
+    // OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE=1 is on. Sending it is harmless
+    // when the gate is off.
+    final session = await fetchTranslationSession(
+      outputLanguage: route.sourceBcp47,
+      inputLanguage: route.targetBcp47,
+    );
     if (!identical(_room, roomRef)) {
       throw StateError('room_changed_after_session');
     }

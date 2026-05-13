@@ -42,6 +42,15 @@ const OPENAI_TRANSLATION_VAD_SILENCE_MS = (() => {
   const n = Number(process.env.OPENAI_TRANSLATION_VAD_SILENCE_MS);
   return Number.isFinite(n) && n >= 0 ? n : 400;
 })();
+/**
+ * Set to `1` to forward the client-provided `inputLanguage` to OpenAI under
+ * `audio.input.language`. Avoids the multi-minute warm-up where OpenAI has
+ * to auto-detect the source language. Off by default in case the field
+ * name is not accepted by the translation endpoint — flip on, test, flip
+ * off if it breaks (no code revert needed).
+ */
+const OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE =
+  process.env.OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE?.trim() === '1';
 const PORT = Number(process.env.PORT || 8787);
 
 const OPENAI_TRANSLATION_CLIENT_SECRETS =
@@ -202,7 +211,7 @@ app.post('/livekit/token', async (req, res) => {
 
 /**
  * POST /translation/realtime/session
- * Body: { outputLanguage: "fr" }  (BCP-47; primary subtag is used)
+ * Body: { outputLanguage: "fr", inputLanguage?: "en" }  (BCP-47; primary subtag is used)
  * Proxies OpenAI Realtime Translation client_secrets (short-lived key for WebRTC).
  */
 app.post('/translation/realtime/session', async (req, res) => {
@@ -217,6 +226,13 @@ app.post('/translation/realtime/session', async (req, res) => {
   if (!tag || !isReasonableLanguageTag(tag)) {
     return res.status(400).json({ error: 'invalid_output_language' });
   }
+
+  // Optional client-provided source language — forwarded only if the env
+  // gate is on. Validated independently so a malformed value cannot poison
+  // the request.
+  const inputTagCandidate = primaryLanguageTag(req.body?.inputLanguage);
+  const inputTag =
+    isReasonableLanguageTag(inputTagCandidate) ? inputTagCandidate : null;
 
   try {
     const audioInput = {};
@@ -233,6 +249,9 @@ app.post('/translation/realtime/session', async (req, res) => {
         prefix_padding_ms: OPENAI_TRANSLATION_VAD_PREFIX_MS,
         silence_duration_ms: OPENAI_TRANSLATION_VAD_SILENCE_MS,
       };
+    }
+    if (OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE && inputTag) {
+      audioInput.language = inputTag;
     }
 
     const sessionPayload = {

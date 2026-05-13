@@ -103,12 +103,17 @@ String? pickClientSecret(Map<String, dynamic> j) {
 
 Future<Map<String, dynamic>> fetchTranslationSession({
   required String outputLanguage,
+  String? inputLanguage,
 }) async {
   final uri = _translationSessionUri();
+  final body = <String, dynamic>{'outputLanguage': outputLanguage};
+  if (inputLanguage != null && inputLanguage.trim().isNotEmpty) {
+    body['inputLanguage'] = inputLanguage;
+  }
   final res = await http.post(
     uri,
     headers: const {'Content-Type': 'application/json'},
-    body: jsonEncode({'outputLanguage': outputLanguage}),
+    body: jsonEncode(body),
   );
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw TranslationApiException(
