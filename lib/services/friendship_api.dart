@@ -1,0 +1,125 @@
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'supabase_service.dart';
+
+enum FriendshipStatus { none, pendingOutgoing, pendingIncoming, accepted, rejected }
+
+class Friendship {
+  const Friendship({
+    required this.id,
+    required this.requester,
+    required this.addressee,
+    required this.status,
+  });
+
+  final String id;
+  final String requester;
+  final String addressee;
+  final String status;
+
+  factory Friendship.fromMap(Map<String, dynamic> m) => Friendship(
+        id: m['id']?.toString() ?? '',
+        requester: m['requester']?.toString() ?? '',
+        addressee: m['addressee']?.toString() ?? '',
+        status: m['status']?.toString() ?? 'pending',
+      );
+
+  /// The "other side" of the relation from [meId]'s perspective.
+  String peerOf(String meId) => requester == meId ? addressee : requester;
+}
+
+abstract final class FriendshipApi {
+  static SupabaseClient get _c => Supabase.instance.client;
+
+  /// Fetch every friendship row involving [meId] in either direction.
+  static Future<List<Friendship>> fetchMine(String meId) async {
+    if (!isSupabaseReady || meId.isEmpty) return const [];
+    final rows = await _c
+        .from('friendships')
+        .select()
+        .or('requester.eq.$meId,addressee.eq.$meId');
+    return (rows as List)
+        .map((r) => Friendship.fromMap(Map<String, dynamic>.from(r as Map)))
+        .toList(growable: false);
+  }
+
+  /// Send a friend request to [peerId]. Idempotent: if a row already exists in
+  /// either direction it is left untouched and the existing row is returned.
+  static Future<Friendship?> sendRequest({
+    required String meId,
+    required String peerId,
+  }) async {
+    if (!isSupabaseReady) return null;
+    if (meId.isEmpty || peerId.isEmpty || meId == peerId) return null;
+
+    // Check both directions to avoid duplicates / contradictions.
+    final existing = await _c
+        .from('friendships')
+        .select()
+        .or('and(requester.eq.$meId,addressee.eq.$peerId),and(requester.eq.$peerId,addressee.eq.$meId)')
+        .limit(1)
+        .maybeSingle();
+    if (existing != null) {
+      return Friendship.fromMap(Map<String, dynamic>.from(existing));
+    }
+
+    try {
+      final inserted = await _c
+          .from('friendships')
+          .insert({
+            'requester': meId,
+            'addressee': peerId,
+            'status': 'pending',
+          })
+          .select()
+          .single();
+      return Friendship.fromMap(Map<String, dynamic>.from(inserted));
+    } catch (e) {
+      debugPrint('FriendshipApi.sendRequest failed: $e');
+      return null;
+    }
+  }
+
+  static Future<void> accept(String friendshipId) async {
+    if (!isSupabaseReady) return;
+    await _c.from('friendships').update({'status': 'accepted'}).eq('id', friendshipId);
+  }
+
+  static Future<void> reject(String friendshipId) async {
+    if (!isSupabaseReady) return;
+    await _c.from('friendships').update({'status': 'rejected'}).eq('id', friendshipId);
+  }
+
+  static Future<void> remove(String friendshipId) async {
+    if (!isSupabaseReady) return;
+    await _c.from('friendships').delete().eq('id', friendshipId);
+  }
+
+  /// Derive how I (`meId`) currently stand with [peerId] given a list of my
+  /// friendships. Useful for tagging each search result with a status pill.
+  static (FriendshipStatus, Friendship?) statusWith(
+    String meId,
+    String peerId,
+    List<Friendship> mine,
+  ) {
+    for (final f in mine) {
+      final involvesPeer =
+          (f.requester == meId && f.addressee == peerId) ||
+              (f.requester == peerId && f.addressee == meId);
+      if (!involvesPeer) continue;
+      switch (f.status) {
+        case 'accepted':
+          return (FriendshipStatus.accepted, f);
+        case 'rejected':
+          return (FriendshipStatus.rejected, f);
+        case 'pending':
+          if (f.requester == meId) {
+            return (FriendshipStatus.pendingOutgoing, f);
+          }
+          return (FriendshipStatus.pendingIncoming, f);
+      }
+    }
+    return (FriendshipStatus.none, null);
+  }
+}

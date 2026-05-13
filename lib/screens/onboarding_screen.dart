@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/device_id.dart';
 import '../services/languages.dart';
+import '../services/profile_api.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 
@@ -73,6 +75,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       sourceLang: _selectedLang!,
       // Other person's language is now discovered live from their metadata.
       targetLang: '',
+    );
+    // Mirror to Supabase so other users can discover this profile in search.
+    // Best-effort: failure here does not block onboarding.
+    final deviceId = await DeviceId.getOrCreate();
+    await ProfileApi.upsertMyProfile(
+      deviceId: deviceId,
+      firstName: name,
+      sourceLang: _selectedLang!,
     );
     if (!mounted) return;
     widget.onCompleted();

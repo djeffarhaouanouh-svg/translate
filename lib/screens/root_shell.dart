@@ -4,6 +4,7 @@ import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import 'chat_screen.dart';
 import 'join_screen.dart';
+import 'search_screen.dart';
 
 /// Bottom-nav host for the app. The existing join flow lives at the centered
 /// "Appel" tab; the three placeholder tabs are scaffolded for later screens.
@@ -21,7 +22,7 @@ class _RootShellState extends State<RootShell> {
   int _index = _mainIndex;
 
   late final List<Widget> _pages = <Widget>[
-    const _PlaceholderTab(title: 'Onglet 1'),
+    const SearchScreen(),
     JoinScreen(translation: widget.translation),
     const ChatScreen(),
     const _PlaceholderTab(title: 'Onglet 3'),
@@ -29,9 +30,9 @@ class _RootShellState extends State<RootShell> {
 
   static const List<NavigationDestination> _destinations = <NavigationDestination>[
     NavigationDestination(
-      icon: Icon(Icons.circle_outlined),
-      selectedIcon: Icon(Icons.circle),
-      label: 'Onglet 1',
+      icon: Icon(Icons.search),
+      selectedIcon: Icon(Icons.manage_search),
+      label: 'Recherche',
     ),
     NavigationDestination(
       icon: Icon(Icons.call_outlined),
