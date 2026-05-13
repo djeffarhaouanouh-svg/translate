@@ -356,7 +356,6 @@ class _CallScreenState extends State<CallScreen> {
     final remote = _remoteVideo(room);
     final local = _localVideo(room);
     final remoteCount = room.remoteParticipants.length;
-    final connection = room.connectionState;
     final peer = _primaryRemote(room);
     final peerName = _remoteDisplayName(peer);
 
@@ -415,75 +414,11 @@ class _CallScreenState extends State<CallScreen> {
                       ],
                     ),
                   ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.72),
-                          Colors.black.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: _confirmLeave,
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
-                          tooltip: 'Leave',
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.roomName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 17,
-                                ),
-                              ),
-                              Text(
-                                '${widget.displayName} · ${_connectionLabel(connection)}',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.78),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (remoteCount > 1)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: WhatsAppCallTheme.danger.withValues(alpha: 0.92),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              '2+ in room',
-                              style: TextStyle(color: Colors.white, fontSize: 11),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
                 if (widget.translation.translationListenable != null)
                   Positioned(
                     left: 10,
                     right: 10,
-                    top: MediaQuery.paddingOf(context).top + 40,
+                    top: MediaQuery.paddingOf(context).top + 12,
                     child: ListenableBuilder(
                       listenable: widget.translation.translationListenable!,
                       builder: (context, _) {
@@ -608,18 +543,6 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  String _connectionLabel(ConnectionState s) {
-    switch (s) {
-      case ConnectionState.connected:
-        return 'Connected';
-      case ConnectionState.connecting:
-        return 'Connecting…';
-      case ConnectionState.reconnecting:
-        return 'Reconnecting…';
-      case ConnectionState.disconnected:
-        return 'Disconnected';
-    }
-  }
 }
 
 class _RoundCallButton extends StatelessWidget {
