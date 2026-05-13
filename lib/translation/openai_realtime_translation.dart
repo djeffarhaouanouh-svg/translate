@@ -44,19 +44,6 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   bool _remoteVoiceHot = false;
   bool _wasPcConnected = false;
 
-  /// RTP sender for the cloned remote audio we forward to OpenAI.
-  /// Held so we can `replaceTrack(null)` during silence to stop billing input
-  /// audio, and `replaceTrack(_clonedSource)` to resume — no SDP renegotiation
-  /// either way, so resume latency is ~tens of ms (vs. ~seconds for a reopen).
-  RTCRtpSender? _audioSender;
-  Timer? _pauseAfterSilenceTimer;
-  bool _audioPaused = false;
-
-  /// How long the remote must be silent before we detach the audio sender.
-  /// Long enough to swallow inter-word breath pauses; short enough that
-  /// listening pauses stop costing input tokens quickly.
-  static const Duration _silenceHangover = Duration(milliseconds: 1000);
-
   @override
   Listenable? get translationListenable => this;
 
@@ -254,85 +241,14 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   }
 
   void _onActiveSpeakersChanged(ActiveSpeakersChangedEvent e) {
-    // VAD source: prefer the participant whose track we are translating so
-    // multi-party calls do not resume on the wrong speaker.
-    final bound = _boundRemoteParticipant();
-    final hot = bound != null
-        ? e.speakers.any((p) => identical(p, bound) || p.sid == bound.sid)
-        : e.speakers.any((p) => p is RemoteParticipant);
+    final hot = e.speakers.any((p) => p is RemoteParticipant);
     if (hot != _remoteVoiceHot) {
       _remoteVoiceHot = hot;
       notifyListeners();
     }
-    _evaluateSpeechGate();
-  }
-
-  Participant? _boundRemoteParticipant() {
-    final sid = _boundPublicationSid;
-    final room = _room;
-    if (sid == null || room == null) return null;
-    for (final p in room.remoteParticipants.values) {
-      for (final pub in p.audioTrackPublications) {
-        if (pub.sid == sid) return p;
-      }
-    }
-    return null;
-  }
-
-  /// Drives the [_audioSender] gate from the latest VAD signal:
-  /// hot → resume now; cold → arm a hangover that pauses on expiry.
-  void _evaluateSpeechGate() {
-    if (_audioSender == null) return;
-    if (_remoteVoiceHot) {
-      _resumeAudioForSpeech();
-    } else {
-      _schedulePauseForSilence();
-    }
-  }
-
-  void _schedulePauseForSilence() {
-    if (_audioPaused) return;
-    _pauseAfterSilenceTimer?.cancel();
-    _pauseAfterSilenceTimer = Timer(_silenceHangover, _pauseAudioForSilence);
-  }
-
-  void _pauseAudioForSilence() {
-    _pauseAfterSilenceTimer = null;
-    if (_audioPaused) return;
-    final sender = _audioSender;
-    if (sender == null) return;
-    _audioPaused = true;
-    unawaited(_safeReplaceTrack(sender, null));
-  }
-
-  void _resumeAudioForSpeech() {
-    _pauseAfterSilenceTimer?.cancel();
-    _pauseAfterSilenceTimer = null;
-    if (!_audioPaused) return;
-    final sender = _audioSender;
-    final cloned = _clonedSource;
-    if (sender == null || cloned == null) return;
-    _audioPaused = false;
-    unawaited(_safeReplaceTrack(sender, cloned));
-  }
-
-  static Future<void> _safeReplaceTrack(
-    RTCRtpSender sender,
-    MediaStreamTrack? track,
-  ) async {
-    try {
-      await sender.replaceTrack(track);
-    } catch (e) {
-      debugPrint('OpenAi translation replaceTrack failed: $e');
-    }
   }
 
   Future<void> _stopMedia() async {
-    _pauseAfterSilenceTimer?.cancel();
-    _pauseAfterSilenceTimer = null;
-    _audioSender = null;
-    _audioPaused = false;
-
     final pc = _pc;
     _pc = null;
     _wasPcConnected = false;
@@ -443,7 +359,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       cloned = await remote.mediaStreamTrack.clone();
       ms = await createLocalMediaStream('openai_translation_src');
       await ms.addTrack(cloned);
-      final audioSender = await pc.addTrack(cloned, ms);
+      await pc.addTrack(cloned, ms);
 
       renderer = RTCVideoRenderer();
       await renderer.initialize();
@@ -482,7 +398,6 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         renderer: renderer,
         clonedSource: cloned,
         localStream: ms,
-        audioSender: audioSender,
         publicationSid: publicationSid,
         session: session,
         connectedFuture: connectedCompleter.future,
@@ -526,15 +441,10 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     _renderer = h.renderer;
     _clonedSource = h.clonedSource;
     _localStream = h.localStream;
-    _audioSender = h.audioSender;
-    // Fresh pipeline is born unpaused (track attached in addTrack). The gate
-    // will pause it after the silence hangover if no one is speaking.
-    _audioPaused = false;
     _boundPublicationSid = h.publicationSid;
     h.inboundCtl.unmute();
     notifyListeners();
     _scheduleNextRefreshFromSession(h.session);
-    _evaluateSpeechGate();
   }
 
   Future<void> _disposeHandle(_PipelineHandle h) async {
@@ -660,33 +570,20 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final oldRenderer = _renderer;
     final oldStream = _localStream;
     final oldCloned = _clonedSource;
-    final wasPaused = _audioPaused;
 
     _pc = handle.pc;
     _renderer = handle.renderer;
     _clonedSource = handle.clonedSource;
     _localStream = handle.localStream;
-    _audioSender = handle.audioSender;
     _boundPublicationSid = handle.publicationSid;
     // The new pc just reached Connected; mark it so the next state callback
     // does not fire a second haptic.
     _wasPcConnected = true;
 
-    // Preserve pause state across the swap: if we were paused (remote silent),
-    // detach the new sender's track immediately so we do not leak input audio
-    // bytes for one hangover window after every renewal.
-    if (wasPaused) {
-      _audioPaused = true;
-      unawaited(_safeReplaceTrack(handle.audioSender, null));
-    } else {
-      _audioPaused = false;
-    }
-
     handle.inboundCtl.unmute();
 
     notifyListeners();
     _scheduleNextRefreshFromSession(handle.session);
-    _evaluateSpeechGate();
 
     unawaited(_disposeOldResources(
       pc: oldPc,
@@ -867,7 +764,6 @@ class _PipelineHandle {
     required this.renderer,
     required this.clonedSource,
     required this.localStream,
-    required this.audioSender,
     required this.publicationSid,
     required this.session,
     required this.connectedFuture,
@@ -877,7 +773,6 @@ class _PipelineHandle {
   final RTCVideoRenderer renderer;
   final MediaStreamTrack clonedSource;
   final MediaStream localStream;
-  final RTCRtpSender audioSender;
   final String publicationSid;
   final Map<String, dynamic> session;
   /// Completes true on Connected, false on Failed/Closed (or via timeout).
