@@ -11,9 +11,9 @@ const { AccessToken } = require('livekit-server-sdk');
 
 dotenv.config();
 
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
-const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
+const LIVEKIT_URL = process.env.LIVEKIT_URL?.trim();
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY?.trim();
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET?.trim();
 const PORT = Number(process.env.PORT || 8787);
 
 const webPath = path.join(__dirname, 'web');
@@ -74,7 +74,7 @@ app.get('/api', (_req, res) => {
  * - sourceLang: this participant's spoken language (BCP-47). Translate the remote participant's speech into this language for this participant to hear.
  * - targetLang: the remote participant's spoken language (BCP-47). Translate this participant's speech into this language for the remote participant to hear.
  */
-app.post('/livekit/token', (req, res) => {
+app.post('/livekit/token', async (req, res) => {
   try {
     assertEnv();
   } catch (e) {
@@ -109,7 +109,7 @@ app.post('/livekit/token', (req, res) => {
     canSubscribe: true,
   });
 
-  const token = at.toJwt();
+  const token = await at.toJwt();
 
   return res.json({
     url: LIVEKIT_URL,
