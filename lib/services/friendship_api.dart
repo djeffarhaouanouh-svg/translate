@@ -83,12 +83,18 @@ abstract final class FriendshipApi {
 
   static Future<void> accept(String friendshipId) async {
     if (!isSupabaseReady) return;
-    await _c.from('friendships').update({'status': 'accepted'}).eq('id', friendshipId);
+    await _c.from('friendships').update({
+      'status': 'accepted',
+      'responded_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', friendshipId);
   }
 
   static Future<void> reject(String friendshipId) async {
     if (!isSupabaseReady) return;
-    await _c.from('friendships').update({'status': 'rejected'}).eq('id', friendshipId);
+    await _c.from('friendships').update({
+      'status': 'rejected',
+      'responded_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', friendshipId);
   }
 
   static Future<void> remove(String friendshipId) async {

@@ -37,8 +37,14 @@ create table if not exists public.friendships (
   requester uuid not null,
   addressee uuid not null,
   status text not null default 'pending',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  responded_at timestamptz
 );
+
+-- Defensive: existing dashboards may have created the table before
+-- responded_at was part of the schema.
+alter table public.friendships
+  add column if not exists responded_at timestamptz;
 
 do $$
 begin
