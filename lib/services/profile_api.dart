@@ -34,8 +34,25 @@ class RemoteProfile {
 
 /// Supabase `profiles` table. Mirror of the local UserPrefs profile so that
 /// other users can discover each other by display name.
+/// Result of the most recent [ProfileApi.upsertMyProfile] call. Surfaced in
+/// the Profile screen so users can see whether their row actually reached
+/// Supabase, and what the failure was if it did not.
+class ProfileSyncStatus {
+  ProfileSyncStatus({
+    required this.attemptedAt,
+    required this.ok,
+    this.error,
+  });
+  final DateTime attemptedAt;
+  final bool ok;
+  final String? error;
+}
+
 abstract final class ProfileApi {
   static SupabaseClient get _c => Supabase.instance.client;
+
+  /// Most recent upsert outcome — null before the first attempt.
+  static ProfileSyncStatus? lastSync;
 
   /// Build a deterministic handle from the user's display name + device id
   /// so it stays stable across edits but is unique per install.
@@ -66,18 +83,32 @@ abstract final class ProfileApi {
   }
 
   /// Write-through: insert or update my profile row keyed by [deviceId].
-  /// Safe to call repeatedly — uses upsert on the primary key.
-  /// No-ops (and logs) if Supabase is not configured.
+  /// Safe to call repeatedly — uses upsert on the primary key. Records the
+  /// outcome in [lastSync] so the Profile screen can surface failures.
   static Future<void> upsertMyProfile({
     required String deviceId,
     required String displayName,
     required String language,
   }) async {
+    final now = DateTime.now();
     if (!isSupabaseReady) {
+      lastSync = ProfileSyncStatus(
+        attemptedAt: now,
+        ok: false,
+        error: 'Supabase client not initialized (missing SUPABASE_URL / '
+            'SUPABASE_PUBLISHABLE_KEY at build time).',
+      );
       debugPrint('ProfileApi.upsertMyProfile: Supabase not ready, skipping');
       return;
     }
-    if (deviceId.isEmpty || displayName.isEmpty) return;
+    if (deviceId.isEmpty || displayName.isEmpty) {
+      lastSync = ProfileSyncStatus(
+        attemptedAt: now,
+        ok: false,
+        error: 'Empty deviceId or displayName.',
+      );
+      return;
+    }
     try {
       await _c.from('profiles').upsert({
         'id': deviceId,
@@ -87,7 +118,13 @@ abstract final class ProfileApi {
         'avatar_color': _deriveAvatarColor(displayName + deviceId),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'id');
+      lastSync = ProfileSyncStatus(attemptedAt: now, ok: true);
     } catch (e) {
+      lastSync = ProfileSyncStatus(
+        attemptedAt: now,
+        ok: false,
+        error: e.toString(),
+      );
       debugPrint('ProfileApi.upsertMyProfile failed: $e');
     }
   }

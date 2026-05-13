@@ -78,6 +78,21 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     await _reload();
   }
 
+  Future<void> _manualSync() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    final deviceId = await DeviceId.getOrCreate();
+    final local = await UserPrefs.loadProfile();
+    if (local != null && local.firstName.isNotEmpty) {
+      await ProfileApi.upsertMyProfile(
+        deviceId: deviceId,
+        displayName: local.firstName,
+        language: local.sourceLang,
+      );
+    }
+    await _reload();
+  }
+
   String get _displayName {
     final remote = _remote?.displayName.trim() ?? '';
     if (remote.isNotEmpty) return remote;
@@ -190,8 +205,144 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  _DiagnosticsCard(
+                    deviceId: _deviceId,
+                    remoteFound: _remote != null,
+                    onSync: _manualSync,
+                  ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _DiagnosticsCard extends StatelessWidget {
+  const _DiagnosticsCard({
+    required this.deviceId,
+    required this.remoteFound,
+    required this.onSync,
+  });
+
+  final String deviceId;
+  final bool remoteFound;
+  final VoidCallback onSync;
+
+  @override
+  Widget build(BuildContext context) {
+    final supabaseReady = isSupabaseReady;
+    final sync = ProfileApi.lastSync;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: WhatsAppCallTheme.bar,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2A3942)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Diagnostic',
+            style: TextStyle(
+              color: WhatsAppCallTheme.strongText,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _DiagRow(
+            label: 'Supabase',
+            value: supabaseReady ? 'connecté' : 'NON connecté',
+            ok: supabaseReady,
+          ),
+          _DiagRow(
+            label: 'Profil en DB',
+            value: remoteFound ? 'oui' : 'non',
+            ok: remoteFound,
+          ),
+          _DiagRow(
+            label: 'Mon ID',
+            value: deviceId.isEmpty ? '—' : deviceId,
+            ok: deviceId.isNotEmpty,
+            wrap: true,
+          ),
+          if (sync != null) ...[
+            const Divider(height: 18, color: Color(0xFF2A3942)),
+            _DiagRow(
+              label: 'Dernier sync',
+              value: sync.ok ? 'OK' : 'ÉCHEC',
+              ok: sync.ok,
+            ),
+            if (sync.error != null && sync.error!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SelectableText(
+                sync.error!,
+                style: const TextStyle(
+                  color: Color(0xFFFFAB91),
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: onSync,
+            icon: const Icon(Icons.sync, size: 18),
+            label: const Text('Synchroniser maintenant'),
+            style: FilledButton.styleFrom(
+              backgroundColor: WhatsAppCallTheme.accentMuted,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagRow extends StatelessWidget {
+  const _DiagRow({
+    required this.label,
+    required this.value,
+    required this.ok,
+    this.wrap = false,
+  });
+
+  final String label;
+  final String value;
+  final bool ok;
+  final bool wrap;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueWidget = SelectableText(
+      value,
+      maxLines: wrap ? null : 1,
+      style: TextStyle(
+        color: ok ? WhatsAppCallTheme.strongText : const Color(0xFFFFAB91),
+        fontSize: 12,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
+            ),
+          ),
+          Expanded(child: valueWidget),
+        ],
       ),
     );
   }
