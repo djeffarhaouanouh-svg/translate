@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
@@ -31,8 +30,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _reload();
-    // Opening the Chat list clears the unread badge.
-    ChatUnread.markAllSeen();
+    // NOTE: we deliberately do NOT call ChatUnread.markAllSeen() here.
+    // ChatScreen lives inside IndexedStack, so initState fires at app
+    // launch even when the user is on another tab — calling markAllSeen
+    // here would silently wipe the unread badge before the user ever
+    // sees it. The badge is cleared in RootShell when the user actually
+    // taps the Chat tab destination.
   }
 
   @override
