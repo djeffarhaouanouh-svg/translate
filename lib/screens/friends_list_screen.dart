@@ -76,15 +76,22 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   }
 
   Future<void> _followBack(RemoteProfile peer) async {
-    final f = await FriendshipApi.sendRequest(meId: _myId, peerId: peer.id);
-    if (!mounted) return;
-    if (f == null) {
+    try {
+      final f = await FriendshipApi.sendRequest(meId: _myId, peerId: peer.id);
+      if (!mounted) return;
+      if (f == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Supabase non configuré.")),
+        );
+        return;
+      }
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Impossible d'envoyer la demande.")),
+        SnackBar(content: Text('Erreur: $e')),
       );
-      return;
     }
-    await _load();
   }
 
   @override

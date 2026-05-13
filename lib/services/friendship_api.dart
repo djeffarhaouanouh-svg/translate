@@ -197,25 +197,20 @@ abstract final class FriendshipApi {
       }
     }
 
-    try {
-      final payload = <String, dynamic>{
-        'requester': meId,
-        'addressee': peerId,
-        'status': autoAccept ? 'accepted' : 'pending',
-      };
-      if (autoAccept) {
-        payload['responded_at'] = nowIso;
-      }
-      final inserted = await _c
-          .from('friendships')
-          .insert(payload)
-          .select()
-          .single();
-      return Friendship.fromMap(Map<String, dynamic>.from(inserted));
-    } catch (e) {
-      debugPrint('FriendshipApi.sendRequest failed: $e');
-      return null;
+    final payload = <String, dynamic>{
+      'requester': meId,
+      'addressee': peerId,
+      'status': autoAccept ? 'accepted' : 'pending',
+    };
+    if (autoAccept) {
+      payload['responded_at'] = nowIso;
     }
+    final inserted = await _c
+        .from('friendships')
+        .insert(payload)
+        .select()
+        .single();
+    return Friendship.fromMap(Map<String, dynamic>.from(inserted));
   }
 
   static Future<void> accept(String friendshipId) async {

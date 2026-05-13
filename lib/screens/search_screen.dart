@@ -118,15 +118,22 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   }
 
   Future<void> _sendRequest(RemoteProfile peer) async {
-    final f = await FriendshipApi.sendRequest(meId: _myId, peerId: peer.id);
-    if (!mounted) return;
-    if (f == null) {
+    try {
+      final f = await FriendshipApi.sendRequest(meId: _myId, peerId: peer.id);
+      if (!mounted) return;
+      if (f == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Supabase non configuré.')),
+        );
+        return;
+      }
+      await _refreshFriendships();
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible d\'envoyer la demande.')),
+        SnackBar(content: Text('Erreur: $e')),
       );
-      return;
     }
-    await _refreshFriendships();
   }
 
   Future<void> _accept(Friendship f) async {
