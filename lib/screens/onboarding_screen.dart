@@ -92,8 +92,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final deviceId = await DeviceId.getOrCreate();
     await ProfileApi.upsertMyProfile(
       deviceId: deviceId,
-      firstName: name,
-      sourceLang: _selectedLang!,
+      displayName: name,
+      language: _selectedLang!,
     );
     if (!mounted) return;
     widget.onCompleted();

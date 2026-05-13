@@ -1,18 +1,32 @@
--- Profile + friendships backing the Onglet 1 friend-search page.
--- Idempotent: if the tables already exist (you created them in the dashboard),
--- only the RLS policies / indexes / realtime publication entries that are
--- missing get added.
+-- Profile + friendships backing Onglet 1 (search) and Onglet 3 (profile).
+-- Idempotent: re-running is safe; existing tables / columns are preserved
+-- and missing pieces are added.
 
 -- ─── profiles ─────────────────────────────────────────────────────────────
 create table if not exists public.profiles (
   id uuid primary key,
-  first_name text not null,
-  source_lang text not null default '',
-  created_at timestamptz not null default now()
+  handle text,
+  display_name text not null,
+  language text not null default '',
+  avatar_color text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
-create index if not exists profiles_first_name_lower_idx
-  on public.profiles (lower(first_name));
+-- Defensive: bring older table shapes in line.
+alter table public.profiles add column if not exists handle text;
+alter table public.profiles add column if not exists avatar_color text;
+alter table public.profiles add column if not exists updated_at timestamptz not null default now();
+
+-- A unique handle lets us namespace future "@mentions" without collisions.
+do $$
+begin
+  alter table public.profiles add constraint profiles_handle_unique unique (handle);
+exception when duplicate_object then null;
+end$$;
+
+create index if not exists profiles_display_name_lower_idx
+  on public.profiles (lower(display_name));
 
 alter table public.profiles enable row level security;
 
@@ -29,9 +43,6 @@ create policy "anon_update_profiles"
   on public.profiles for update using (true);
 
 -- ─── friendships ──────────────────────────────────────────────────────────
--- The unique (requester, addressee) constraint prevents duplicate requests in
--- the same direction. The app treats (A→B) and (B→A) as the same relation by
--- querying both rows.
 create table if not exists public.friendships (
   id uuid primary key default gen_random_uuid(),
   requester uuid not null,
@@ -41,8 +52,6 @@ create table if not exists public.friendships (
   responded_at timestamptz
 );
 
--- Defensive: existing dashboards may have created the table before
--- responded_at was part of the schema.
 alter table public.friendships
   add column if not exists responded_at timestamptz;
 
@@ -62,7 +71,7 @@ drop policy if exists "anon_all_friendships" on public.friendships;
 create policy "anon_all_friendships"
   on public.friendships for all using (true) with check (true);
 
--- Realtime for live status changes (pending → accepted etc.).
+-- ─── Realtime publication ────────────────────────────────────────────────
 do $$
 begin
   alter publication supabase_realtime add table public.profiles;

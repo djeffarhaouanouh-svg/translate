@@ -5,6 +5,12 @@ import 'supabase_service.dart';
 
 enum FriendshipStatus { none, pendingOutgoing, pendingIncoming, accepted, rejected }
 
+class FriendshipCounts {
+  const FriendshipCounts({required this.followers, required this.following});
+  final int followers;
+  final int following;
+}
+
 class Friendship {
   const Friendship({
     required this.id,
@@ -31,6 +37,34 @@ class Friendship {
 
 abstract final class FriendshipApi {
   static SupabaseClient get _c => Supabase.instance.client;
+
+  /// Counts for the profile screen.
+  /// - `followers`  = accepted friendships where I am the addressee.
+  /// - `following`  = accepted friendships where I am the requester.
+  static Future<FriendshipCounts> countsFor(String userId) async {
+    if (!isSupabaseReady || userId.isEmpty) {
+      return const FriendshipCounts(followers: 0, following: 0);
+    }
+    try {
+      final followers = await _c
+          .from('friendships')
+          .select('id')
+          .eq('addressee', userId)
+          .eq('status', 'accepted');
+      final following = await _c
+          .from('friendships')
+          .select('id')
+          .eq('requester', userId)
+          .eq('status', 'accepted');
+      return FriendshipCounts(
+        followers: (followers as List).length,
+        following: (following as List).length,
+      );
+    } catch (e) {
+      debugPrint('FriendshipApi.countsFor failed: $e');
+      return const FriendshipCounts(followers: 0, following: 0);
+    }
+  }
 
   /// Fetch every friendship row involving [meId] in either direction.
   static Future<List<Friendship>> fetchMine(String meId) async {

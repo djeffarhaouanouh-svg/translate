@@ -6,51 +6,93 @@ import 'supabase_service.dart';
 class RemoteProfile {
   const RemoteProfile({
     required this.id,
-    required this.firstName,
-    required this.sourceLang,
+    required this.handle,
+    required this.displayName,
+    required this.language,
+    required this.avatarColor,
   });
 
   final String id;
-  final String firstName;
-  final String sourceLang;
+  final String handle;
+  final String displayName;
+  final String language;
+  final String avatarColor;
+
+  /// Backwards-compat shim — the rest of the UI still reads `firstName` /
+  /// `sourceLang`. Same data, different schema names.
+  String get firstName => displayName;
+  String get sourceLang => language;
 
   factory RemoteProfile.fromMap(Map<String, dynamic> m) => RemoteProfile(
         id: m['id']?.toString() ?? '',
-        firstName: m['first_name']?.toString() ?? '',
-        sourceLang: m['source_lang']?.toString() ?? '',
+        handle: m['handle']?.toString() ?? '',
+        displayName: m['display_name']?.toString() ?? '',
+        language: m['language']?.toString() ?? '',
+        avatarColor: m['avatar_color']?.toString() ?? '',
       );
 }
 
 /// Supabase `profiles` table. Mirror of the local UserPrefs profile so that
-/// other users can discover each other by first name.
+/// other users can discover each other by display name.
 abstract final class ProfileApi {
   static SupabaseClient get _c => Supabase.instance.client;
+
+  /// Build a deterministic handle from the user's display name + device id
+  /// so it stays stable across edits but is unique per install.
+  static String _deriveHandle(String displayName, String deviceId) {
+    final sanitized = displayName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '')
+        .substring(0, displayName.length.clamp(0, 24));
+    final suffix = deviceId.replaceAll('-', '').substring(0, 6);
+    final base = sanitized.isEmpty ? 'user' : sanitized;
+    return '$base-$suffix';
+  }
+
+  /// Deterministic accent color for the avatar circle when there is no
+  /// uploaded photo. Returns a 7-char `#RRGGBB`.
+  static String _deriveAvatarColor(String seed) {
+    const palette = <String>[
+      '#00A884', '#128C7E', '#075E54', '#34B7F1', '#1F6FEB',
+      '#7B61FF', '#A855F7', '#EC4899', '#F97316', '#EAB308',
+      '#22C55E', '#14B8A6',
+    ];
+    if (seed.isEmpty) return palette[0];
+    var hash = 0;
+    for (final c in seed.codeUnits) {
+      hash = (hash * 31 + c) & 0x7fffffff;
+    }
+    return palette[hash % palette.length];
+  }
 
   /// Write-through: insert or update my profile row keyed by [deviceId].
   /// Safe to call repeatedly — uses upsert on the primary key.
   /// No-ops (and logs) if Supabase is not configured.
   static Future<void> upsertMyProfile({
     required String deviceId,
-    required String firstName,
-    required String sourceLang,
+    required String displayName,
+    required String language,
   }) async {
     if (!isSupabaseReady) {
       debugPrint('ProfileApi.upsertMyProfile: Supabase not ready, skipping');
       return;
     }
-    if (deviceId.isEmpty || firstName.isEmpty) return;
+    if (deviceId.isEmpty || displayName.isEmpty) return;
     try {
       await _c.from('profiles').upsert({
         'id': deviceId,
-        'first_name': firstName,
-        'source_lang': sourceLang,
+        'handle': _deriveHandle(displayName, deviceId),
+        'display_name': displayName,
+        'language': language,
+        'avatar_color': _deriveAvatarColor(displayName + deviceId),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'id');
     } catch (e) {
       debugPrint('ProfileApi.upsertMyProfile failed: $e');
     }
   }
 
-  /// Case-insensitive substring search by first name. Excludes my own profile.
+  /// Case-insensitive substring search by display name. Excludes my own profile.
   static Future<List<RemoteProfile>> searchByFirstName({
     required String query,
     required String myDeviceId,
@@ -61,9 +103,9 @@ abstract final class ProfileApi {
     final rows = await _c
         .from('profiles')
         .select()
-        .ilike('first_name', '%$q%')
+        .ilike('display_name', '%$q%')
         .neq('id', myDeviceId)
-        .order('first_name', ascending: true)
+        .order('display_name', ascending: true)
         .limit(limit);
     return (rows as List)
         .map((r) => RemoteProfile.fromMap(Map<String, dynamic>.from(r as Map)))
@@ -77,5 +119,13 @@ abstract final class ProfileApi {
     return (rows as List)
         .map((r) => RemoteProfile.fromMap(Map<String, dynamic>.from(r as Map)))
         .toList(growable: false);
+  }
+
+  /// Fetch a single profile by id, or null if no row exists.
+  static Future<RemoteProfile?> fetchById(String id) async {
+    if (!isSupabaseReady || id.isEmpty) return null;
+    final row = await _c.from('profiles').select().eq('id', id).maybeSingle();
+    if (row == null) return null;
+    return RemoteProfile.fromMap(Map<String, dynamic>.from(row));
   }
 }

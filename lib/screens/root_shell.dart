@@ -5,6 +5,7 @@ import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import 'chat_screen.dart';
 import 'join_screen.dart';
+import 'profile_screen.dart';
 import 'search_screen.dart';
 
 /// Bottom-nav host for the app. The existing join flow lives at the centered
@@ -26,7 +27,7 @@ class _RootShellState extends State<RootShell> {
     const SearchScreen(),
     JoinScreen(translation: widget.translation),
     const ChatScreen(),
-    _PlaceholderTab(title: AppStrings.t('nav_tab3')),
+    const ProfileScreen(),
   ];
 
   List<NavigationDestination> get _destinations => <NavigationDestination>[
@@ -46,8 +47,8 @@ class _RootShellState extends State<RootShell> {
           label: AppStrings.t('nav_chat'),
         ),
         NavigationDestination(
-          icon: const Icon(Icons.circle_outlined),
-          selectedIcon: const Icon(Icons.circle),
+          icon: const Icon(Icons.person_outline),
+          selectedIcon: const Icon(Icons.person),
           label: AppStrings.t('nav_tab3'),
         ),
       ];
@@ -68,24 +69,3 @@ class _RootShellState extends State<RootShell> {
   }
 }
 
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.title});
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: WhatsAppCallTheme.scaffold,
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          AppStrings.t('tab_placeholder_soon'),
-          style: const TextStyle(
-            color: WhatsAppCallTheme.subtleText,
-            fontSize: 18,
-          ),
-        ),
-      ),
-    );
-  }
-}
