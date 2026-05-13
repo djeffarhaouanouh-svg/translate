@@ -90,23 +90,19 @@ class _CallScreenState extends State<CallScreen> {
       _refreshPending = true;
       return;
     }
-    // DIAGNOSTIC: translation pipeline temporarily disabled to test whether
-    // the "1 of 2 devices can publish at a time" bug is caused by the second
-    // WebRTC peer connection opened for OpenAI translation. With this
-    // commented out, the app uses LiveKit only. Re-enable once we know.
     _refreshingTranslation = true;
     try {
-      // do {
-      //   _refreshPending = false;
-      //   final remoteLang = _discoverRemoteLang(room);
-      //   if (remoteLang == _attachedRemoteLang) continue;
-      //   _attachedRemoteLang = remoteLang;
-      //   final route = TranslationRoute(
-      //     sourceBcp47: widget.mySourceLang,
-      //     targetBcp47: remoteLang,
-      //   );
-      //   await widget.translation.attachToRoom(room, route: route);
-      // } while (_refreshPending && mounted);
+      do {
+        _refreshPending = false;
+        final remoteLang = _discoverRemoteLang(room);
+        if (remoteLang == _attachedRemoteLang) continue;
+        _attachedRemoteLang = remoteLang;
+        final route = TranslationRoute(
+          sourceBcp47: widget.mySourceLang,
+          targetBcp47: remoteLang,
+        );
+        await widget.translation.attachToRoom(room, route: route);
+      } while (_refreshPending && mounted);
     } finally {
       _refreshingTranslation = false;
     }

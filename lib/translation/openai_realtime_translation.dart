@@ -32,7 +32,6 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
   RTCPeerConnection? _pc;
   RTCVideoRenderer? _renderer;
-  MediaStreamTrack? _clonedSource;
   MediaStream? _localStream;
   Timer? _refreshTimer;
   /// Recovers if the one-shot refresh timer was never rescheduled (early returns, races).
@@ -264,13 +263,12 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       } catch (_) {}
     }
 
-    final c = _clonedSource;
-    _clonedSource = null;
-    if (c != null) {
-      try {
-        await c.stop();
-      } catch (_) {}
-    }
+    // NOTE: we don't track / stop the cloned remote track on its own.
+    // On Web (notably Safari/WebKit) calling MediaStreamTrack.stop() on
+    // a clone propagates up to the source track in some implementations,
+    // which kills the remote audio LiveKit is also using and can knock
+    // the local mic out of its publication. Disposing the local stream
+    // and closing the PC above is enough to release the clone.
 
     final r = _renderer;
     _renderer = null;
@@ -376,7 +374,6 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
       _pc = pc;
       _renderer = renderer;
-      _clonedSource = cloned;
       _localStream = ms;
       _boundPublicationSid = publicationSid;
       pc = null;
