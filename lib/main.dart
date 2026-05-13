@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/root_shell.dart';
 import 'services/app_strings.dart';
+import 'services/chat_unread.dart';
 import 'services/device_id.dart';
 import 'services/profile_api.dart';
 import 'services/supabase_service.dart';
@@ -63,6 +64,8 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
         displayName: profile.firstName,
         language: profile.sourceLang,
       ));
+      // Live count of unread messages addressed to me, for the Chat-tab badge.
+      unawaited(ChatUnread.start(deviceId));
     }
     if (!mounted) return;
     setState(() {

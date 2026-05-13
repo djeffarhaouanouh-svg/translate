@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/app_strings.dart';
+import '../services/chat_unread.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import 'chat_screen.dart';
@@ -30,7 +31,8 @@ class _RootShellState extends State<RootShell> {
     const ProfileScreen(),
   ];
 
-  List<NavigationDestination> get _destinations => <NavigationDestination>[
+  List<NavigationDestination> _destinationsFor(int unread) =>
+      <NavigationDestination>[
         NavigationDestination(
           icon: const Icon(Icons.search),
           selectedIcon: const Icon(Icons.manage_search),
@@ -42,8 +44,8 @@ class _RootShellState extends State<RootShell> {
           label: AppStrings.t('nav_call'),
         ),
         NavigationDestination(
-          icon: const Icon(Icons.chat_bubble_outline),
-          selectedIcon: const Icon(Icons.chat_bubble),
+          icon: _badged(const Icon(Icons.chat_bubble_outline), unread),
+          selectedIcon: _badged(const Icon(Icons.chat_bubble), unread),
           label: AppStrings.t('nav_chat'),
         ),
         NavigationDestination(
@@ -53,18 +55,39 @@ class _RootShellState extends State<RootShell> {
         ),
       ];
 
+  Widget _badged(Widget icon, int count) {
+    if (count <= 0) return icon;
+    return Badge.count(
+      count: count,
+      backgroundColor: WhatsAppCallTheme.danger,
+      textColor: Colors.white,
+      child: icon,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: WhatsAppCallTheme.scaffold,
-      body: IndexedStack(index: _index, children: _pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        backgroundColor: WhatsAppCallTheme.bar,
-        indicatorColor: WhatsAppCallTheme.accentMuted,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: _destinations,
-      ),
+    return ValueListenableBuilder<int>(
+      valueListenable: ChatUnread.count,
+      builder: (context, unread, _) {
+        return Scaffold(
+          backgroundColor: WhatsAppCallTheme.scaffold,
+          body: IndexedStack(index: _index, children: _pages),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _index,
+            backgroundColor: WhatsAppCallTheme.bar,
+            indicatorColor: WhatsAppCallTheme.accentMuted,
+            onDestinationSelected: (i) {
+              setState(() => _index = i);
+              if (i == 2) {
+                // Opening Chat tab clears the badge.
+                ChatUnread.markAllSeen();
+              }
+            },
+            destinations: _destinationsFor(unread),
+          ),
+        );
+      },
     );
   }
 }

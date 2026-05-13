@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
@@ -30,6 +31,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _reload();
+    // Opening the Chat list clears the unread badge.
+    ChatUnread.markAllSeen();
   }
 
   @override

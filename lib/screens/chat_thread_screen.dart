@@ -66,21 +66,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       (rows) {
         if (!mounted) return;
         setState(() => _messages = rows);
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        // reverse:true ListView keeps new items at the bottom automatically;
+        // no manual scrollToBottom needed.
       },
       onError: (e) {
         if (!mounted) return;
         setState(() => _error = 'Connexion temps réel perdue: $e');
       },
-    );
-  }
-
-  void _scrollToBottom() {
-    if (!_scrollCtrl.hasClients) return;
-    _scrollCtrl.animateTo(
-      _scrollCtrl.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
     );
   }
 
@@ -153,12 +145,18 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         ),
       );
     }
+    // WhatsApp-style: messages stick to the bottom (empty space at top, last
+    // message just above the composer). reverse:true renders the list from
+    // the bottom up; we flip the index so the chronological order is kept.
     return ListView.builder(
       controller: _scrollCtrl,
+      reverse: true,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       itemCount: _messages.length,
       itemBuilder: (ctx, i) {
-        final m = _messages[i];
+        // Flip index because reverse:true renders index 0 at the bottom and
+        // we want the newest (last in the chronological list) at the bottom.
+        final m = _messages[_messages.length - 1 - i];
         final mine = m.senderId == _myId;
         return _MessageBubble(message: m, mine: mine);
       },
