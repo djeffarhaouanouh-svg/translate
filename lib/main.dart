@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'screens/join_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/root_shell.dart';
 import 'services/user_prefs.dart';
 import 'theme/whatsapp_call_theme.dart';
 import 'translation/openai_realtime_translation.dart';
@@ -62,7 +62,7 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
               ? OnboardingScreen(
                   onCompleted: () => setState(() => _needsOnboarding = false),
                 )
-              : JoinScreen(translation: _translation),
+              : RootShell(translation: _translation),
     );
   }
 }
