@@ -129,7 +129,19 @@ class _CallScreenState extends State<CallScreen> {
     try {
       await room.connect(widget.wsUrl, widget.jwt);
       await room.localParticipant?.setCameraEnabled(true);
-      await room.localParticipant?.setMicrophoneEnabled(true);
+      // Disable echo cancellation / noise suppression / AGC: when two devices
+      // co-locate physically they form a feedback loop that aggressive EC
+      // breaks by auto-muting one publisher's mic — which manifests as
+      // "only 1 of 2 can publish at a time" on the call. Trading EC for
+      // deterministic bidirectional publishing.
+      await room.localParticipant?.setMicrophoneEnabled(
+        true,
+        audioCaptureOptions: const AudioCaptureOptions(
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        ),
+      );
       // First attach with whatever remote-lang we already know (often nothing
       // yet). Refreshed dynamically as participants join / metadata arrives.
       await _refreshTranslationBinding(room);
