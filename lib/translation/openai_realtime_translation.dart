@@ -1,14 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import '../services/translation_api.dart';
-import 'mute_livekit_raw_stub.dart' if (dart.library.html) 'mute_livekit_raw_web.dart';
 import 'realtime_translation_port.dart';
 import 'translation_route.dart';
 
@@ -324,14 +322,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
       notifyListeners();
 
-      if (kIsWeb) {
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          muteLiveKitRawRemotePlayback(remote);
-        });
-      } else {
-        muteLiveKitRawRemotePlayback(remote);
-      }
-
+      // Keep LiveKit remote audio audible (original). Translated audio plays from the
+      // OpenAI WebRTC renderer when it arrives — user hears both.
       _scheduleNextRefreshFromSession(session);
     } finally {
       if (renderer != null) {
