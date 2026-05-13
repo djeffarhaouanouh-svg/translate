@@ -21,7 +21,9 @@ import 'translation_route.dart';
 /// fully remove that playback from **your** mic. Prefer headphones / lower speaker volume
 /// so the remote party does not send leaked translation back into this pipeline.
 ///
-/// Renews the OpenAI side before the ephemeral credential expires and retries on failure.
+/// Renews the OpenAI side before the ephemeral credential expires. Renewals build the new
+/// pipeline in parallel with the old one and only swap once it reaches Connected, so the
+/// user does not hear a silence gap during session rollover.
 class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTranslationPort {
   Room? _room;
   TranslationRoute? _route;
@@ -107,7 +109,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final now = DateTime.now();
     Duration delay;
     if (at != null) {
-      // Renew well before server-side expiry (short-lived client secrets).
+      // Seamless renewal needs headroom: build new pipeline, wait for it to
+      // reach Connected, then swap. 25s comfortably covers SDP + ICE.
       delay = at.difference(now) - const Duration(seconds: 25);
       if (delay < const Duration(seconds: 15)) {
         delay = const Duration(seconds: 15);
@@ -283,14 +286,19 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     notifyListeners();
   }
 
-  /// Opens WebRTC to OpenAI; caller must set [_busy] if needed.
-  Future<void> _openPipelineCore(
+  /// Build a new translation pipeline without installing it as the active one.
+  /// The inbound translated audio is held muted (via [_InboundAudioCtl]) until
+  /// the caller installs the handle, so an overlapping seamless renewal does
+  /// not double up audio with the still-playing old pipeline.
+  Future<_PipelineHandle> _buildPipeline(
     RemoteAudioTrack remote,
     String publicationSid,
     Room roomRef,
   ) async {
     final route = _route;
-    if (route == null || !route.isConfigured) return;
+    if (route == null || !route.isConfigured) {
+      throw StateError('not_configured');
+    }
 
     final session = await fetchTranslationSession(outputLanguage: route.sourceBcp47);
     if (!identical(_room, roomRef)) {
@@ -302,6 +310,9 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       debugPrint('OpenAi translation: no client_secret in session response');
       throw StateError('missing client_secret');
     }
+
+    final connectedCompleter = Completer<bool>();
+    final inboundCtl = _InboundAudioCtl();
 
     RTCPeerConnection? pc;
     RTCVideoRenderer? renderer;
@@ -316,9 +327,21 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         ],
       });
 
-      pc.onConnectionState = (RTCPeerConnectionState s) {
-        if (!identical(pc, _pc)) return;
-        _onPcConnectionState(s);
+      final pcRef = pc;
+      pcRef.onConnectionState = (RTCPeerConnectionState s) {
+        // Only drive the live reconnect logic when this pc is the active one;
+        // during a seamless build we are not yet `_pc`.
+        if (identical(pcRef, _pc)) {
+          _onPcConnectionState(s);
+        }
+        if (!connectedCompleter.isCompleted) {
+          if (s == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+            connectedCompleter.complete(true);
+          } else if (s == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+              s == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+            connectedCompleter.complete(false);
+          }
+        }
       };
 
       final dc = await pc.createDataChannel(
@@ -345,6 +368,9 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       pc.onTrack = (RTCTrackEvent event) {
         if (event.streams.isEmpty) return;
         playbackRenderer.srcObject = event.streams[0];
+        if (event.track.kind == 'audio') {
+          inboundCtl.attach(event.track);
+        }
         notifyListeners();
       };
 
@@ -367,21 +393,21 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
       await pc.setRemoteDescription(RTCSessionDescription(answerSdp, 'answer'));
 
-      _pc = pc;
-      _renderer = renderer;
-      _clonedSource = cloned;
-      _localStream = ms;
-      _boundPublicationSid = publicationSid;
+      final handle = _PipelineHandle(
+        pc: pc,
+        renderer: renderer,
+        clonedSource: cloned,
+        localStream: ms,
+        publicationSid: publicationSid,
+        session: session,
+        connectedFuture: connectedCompleter.future,
+        inboundCtl: inboundCtl,
+      );
       pc = null;
       renderer = null;
       cloned = null;
       ms = null;
-
-      notifyListeners();
-
-      // Keep LiveKit remote audio audible (original). Translated audio plays from the
-      // OpenAI WebRTC renderer when it arrives — user hears both.
-      _scheduleNextRefreshFromSession(session);
+      return handle;
     } finally {
       if (renderer != null) {
         try {
@@ -406,8 +432,86 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         } catch (_) {}
       }
     }
+  }
 
-    // If open failed without throwing (should not happen), never stay without a timer.
+  /// Install a freshly built handle as the active pipeline. Caller must have
+  /// torn down any prior pipeline; for hot renewals use [_seamlessRenew].
+  void _installHandle(_PipelineHandle h) {
+    _pc = h.pc;
+    _renderer = h.renderer;
+    _clonedSource = h.clonedSource;
+    _localStream = h.localStream;
+    _boundPublicationSid = h.publicationSid;
+    h.inboundCtl.unmute();
+    notifyListeners();
+    _scheduleNextRefreshFromSession(h.session);
+  }
+
+  Future<void> _disposeHandle(_PipelineHandle h) async {
+    try {
+      h.pc.onConnectionState = null;
+    } catch (_) {}
+    try {
+      await h.pc.close();
+    } catch (_) {}
+    try {
+      await h.localStream.dispose();
+    } catch (_) {}
+    try {
+      await h.clonedSource.stop();
+    } catch (_) {}
+    try {
+      h.renderer.srcObject = null;
+      await h.renderer.dispose();
+    } catch (_) {}
+  }
+
+  Future<void> _disposeOldResources({
+    RTCPeerConnection? pc,
+    MediaStream? localStream,
+    MediaStreamTrack? clonedSource,
+    RTCVideoRenderer? renderer,
+  }) async {
+    if (pc != null) {
+      try {
+        pc.onConnectionState = null;
+      } catch (_) {}
+      try {
+        await pc.close();
+      } catch (_) {}
+    }
+    if (localStream != null) {
+      try {
+        await localStream.dispose();
+      } catch (_) {}
+    }
+    if (clonedSource != null) {
+      try {
+        await clonedSource.stop();
+      } catch (_) {}
+    }
+    if (renderer != null) {
+      try {
+        renderer.srcObject = null;
+        await renderer.dispose();
+      } catch (_) {}
+    }
+  }
+
+  /// Cold-start path. Caller must have ensured no prior pipeline is active.
+  Future<void> _openPipelineCore(
+    RemoteAudioTrack remote,
+    String publicationSid,
+    Room roomRef,
+  ) async {
+    final h = await _buildPipeline(remote, publicationSid, roomRef);
+    if (!identical(_room, roomRef)) {
+      await _disposeHandle(h);
+      throw StateError('room_changed_after_build');
+    }
+    _installHandle(h);
+
+    // Defensive: never stay without a refresh timer.
     if (_room != null &&
         identical(_room, roomRef) &&
         _route != null &&
@@ -418,6 +522,77 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       debugPrint('OpenAi translation: pipeline ended without PC and without timer — retry');
       _scheduleNextRefreshRaw(const Duration(seconds: 4));
     }
+  }
+
+  /// Hot-renew path. Builds a new pipeline alongside the current one, waits
+  /// for the new pc to reach Connected, then atomically swaps refs and
+  /// disposes the old pipeline in the background. The user does not hear a
+  /// gap because the old pipeline keeps producing audio until the swap.
+  ///
+  /// Returns false if the new pipeline could not be brought up; the old
+  /// pipeline is preserved so audio continues until the next attempt.
+  Future<bool> _seamlessRenew(
+    RemoteAudioTrack remote,
+    String publicationSid,
+    Room roomRef,
+  ) async {
+    _PipelineHandle handle;
+    try {
+      handle = await _buildPipeline(remote, publicationSid, roomRef);
+    } catch (e, st) {
+      debugPrint('OpenAi translation seamless build failed: $e\n$st');
+      return false;
+    }
+
+    if (!identical(_room, roomRef)) {
+      await _disposeHandle(handle);
+      return false;
+    }
+
+    final connected = await handle.connectedFuture.timeout(
+      const Duration(seconds: 6),
+      onTimeout: () => false,
+    );
+
+    if (!identical(_room, roomRef)) {
+      await _disposeHandle(handle);
+      return false;
+    }
+
+    if (!connected) {
+      debugPrint('OpenAi translation seamless: new pc did not connect in time');
+      await _disposeHandle(handle);
+      return false;
+    }
+
+    // Atomic swap.
+    final oldPc = _pc;
+    final oldRenderer = _renderer;
+    final oldStream = _localStream;
+    final oldCloned = _clonedSource;
+
+    _pc = handle.pc;
+    _renderer = handle.renderer;
+    _clonedSource = handle.clonedSource;
+    _localStream = handle.localStream;
+    _boundPublicationSid = handle.publicationSid;
+    // The new pc just reached Connected; mark it so the next state callback
+    // does not fire a second haptic.
+    _wasPcConnected = true;
+
+    handle.inboundCtl.unmute();
+
+    notifyListeners();
+    _scheduleNextRefreshFromSession(handle.session);
+
+    unawaited(_disposeOldResources(
+      pc: oldPc,
+      localStream: oldStream,
+      clonedSource: oldCloned,
+      renderer: oldRenderer,
+    ));
+
+    return true;
   }
 
   Future<void> _refreshLoop() async {
@@ -440,9 +615,17 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
     _busy = true;
     try {
-      await _stopMedia();
-      if (!identical(_room, roomRef)) return;
-      await _openPipelineCore(remote, sid, roomRef);
+      if (_pc != null) {
+        final ok = await _seamlessRenew(remote, sid, roomRef);
+        if (!ok) {
+          // Old pipeline is still running; retry seamless renewal shortly
+          // rather than tearing it down (which would inflict the gap we are
+          // trying to avoid).
+          _scheduleNextRefreshRaw(const Duration(seconds: 4));
+        }
+      } else {
+        await _openPipelineCore(remote, sid, roomRef);
+      }
     } catch (e, st) {
       debugPrint('OpenAi translation refresh: $e\n$st');
       await _stopMedia();
@@ -544,4 +727,55 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     unawaited(detach());
     super.dispose();
   }
+}
+
+/// Resolves the race between the WebRTC onTrack callback (which may fire
+/// before or after the pipeline is installed) and the install path. The
+/// inbound translated audio stays muted until [unmute] is called, so a
+/// pipeline built for a seamless renewal cannot start playing alongside the
+/// still-active old pipeline.
+class _InboundAudioCtl {
+  MediaStreamTrack? _track;
+  bool _unmuted = false;
+
+  void attach(MediaStreamTrack t) {
+    _track = t;
+    if (!_unmuted) {
+      try {
+        t.enabled = false;
+      } catch (_) {}
+    }
+  }
+
+  void unmute() {
+    _unmuted = true;
+    final t = _track;
+    if (t != null) {
+      try {
+        t.enabled = true;
+      } catch (_) {}
+    }
+  }
+}
+
+class _PipelineHandle {
+  _PipelineHandle({
+    required this.pc,
+    required this.renderer,
+    required this.clonedSource,
+    required this.localStream,
+    required this.publicationSid,
+    required this.session,
+    required this.connectedFuture,
+    required this.inboundCtl,
+  });
+  final RTCPeerConnection pc;
+  final RTCVideoRenderer renderer;
+  final MediaStreamTrack clonedSource;
+  final MediaStream localStream;
+  final String publicationSid;
+  final Map<String, dynamic> session;
+  /// Completes true on Connected, false on Failed/Closed (or via timeout).
+  final Future<bool> connectedFuture;
+  final _InboundAudioCtl inboundCtl;
 }
