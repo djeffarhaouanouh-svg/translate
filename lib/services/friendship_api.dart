@@ -146,8 +146,10 @@ abstract final class FriendshipApi {
         .toList(growable: false);
   }
 
-  /// Send a friend request to [peerId]. Idempotent: if a row already exists in
-  /// either direction it is left untouched and the existing row is returned.
+  /// Send a friend / follow request from [meId] to [peerId]. Idempotent only
+  /// on the SAME direction — a row in the reverse direction does not block
+  /// creation, so "S'abonner en retour" can mint the B→A row even when an
+  /// A→B row already exists.
   static Future<Friendship?> sendRequest({
     required String meId,
     required String peerId,
@@ -155,11 +157,11 @@ abstract final class FriendshipApi {
     if (!isSupabaseReady) return null;
     if (meId.isEmpty || peerId.isEmpty || meId == peerId) return null;
 
-    // Check both directions to avoid duplicates / contradictions.
     final existing = await _c
         .from('friendships')
         .select()
-        .or('and(requester.eq.$meId,addressee.eq.$peerId),and(requester.eq.$peerId,addressee.eq.$meId)')
+        .eq('requester', meId)
+        .eq('addressee', peerId)
         .limit(1)
         .maybeSingle();
     if (existing != null) {
