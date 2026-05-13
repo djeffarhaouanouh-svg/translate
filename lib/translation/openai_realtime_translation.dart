@@ -29,6 +29,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   MediaStreamTrack? _clonedSource;
   MediaStream? _localStream;
   Timer? _refreshTimer;
+  /// Recovers if the one-shot refresh timer was never rescheduled (early returns, races).
+  Timer? _watchdogTimer;
   bool _busy = false;
   DateTime? _lastConnectionDropSchedule;
   bool _remoteVoiceHot = false;
@@ -99,14 +101,49 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final now = DateTime.now();
     Duration delay;
     if (at != null) {
-      delay = at.difference(now) - const Duration(seconds: 12);
-      if (delay < const Duration(seconds: 10)) {
-        delay = const Duration(seconds: 10);
+      // Renew well before server-side expiry (short-lived client secrets).
+      delay = at.difference(now) - const Duration(seconds: 25);
+      if (delay < const Duration(seconds: 15)) {
+        delay = const Duration(seconds: 15);
       }
     } else {
-      delay = const Duration(seconds: 45);
+      delay = const Duration(seconds: 35);
     }
     _scheduleNextRefreshRaw(delay);
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(const Duration(seconds: 22), (_) => _watchdogTick());
+  }
+
+  void _stopWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+  }
+
+  void _watchdogTick() {
+    if (_room == null || _route == null || !_route!.isConfigured) return;
+    if (_boundPublicationSid == null && _cachedRemote == null) return;
+    if (_busy) return;
+
+    // Lost the one-shot renewal timer (e.g. silent early-return in open pipeline).
+    if (_refreshTimer == null) {
+      debugPrint('OpenAi translation: watchdog — no refresh timer, re-arming');
+      _scheduleNextRefreshRaw(const Duration(seconds: 2));
+      return;
+    }
+
+    final pc = _pc;
+    if (pc != null) {
+      final cs = pc.connectionState ?? RTCPeerConnectionState.RTCPeerConnectionStateNew;
+      if (cs == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          cs == RTCPeerConnectionState.RTCPeerConnectionStateClosed ||
+          cs == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        debugPrint('OpenAi translation: watchdog — pc state $cs, forcing refresh');
+        _scheduleNextRefreshRaw(const Duration(seconds: 2));
+      }
+    }
   }
 
   RemoteAudioTrack? _resolveRemoteAudio() {
@@ -132,7 +169,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     _wasPcConnected = nowConnected;
     notifyListeners();
 
-    if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+    if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+        state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
       if (_room == null) return;
       final now = DateTime.now();
       if (_lastConnectionDropSchedule != null &&
@@ -200,7 +238,9 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     if (route == null || !route.isConfigured) return;
 
     final session = await fetchTranslationSession(outputLanguage: route.sourceBcp47);
-    if (!identical(_room, roomRef)) return;
+    if (!identical(_room, roomRef)) {
+      throw StateError('room_changed_after_session');
+    }
 
     final secret = pickClientSecret(session);
     if (secret == null || secret.isEmpty) {
@@ -261,10 +301,14 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         throw StateError('empty local SDP');
       }
 
-      if (!identical(_room, roomRef)) return;
+      if (!identical(_room, roomRef)) {
+        throw StateError('room_changed_before_sdp');
+      }
 
       final answerSdp = await postTranslationCallsSdp(clientSecret: secret, sdpOffer: sdp);
-      if (!identical(_room, roomRef)) return;
+      if (!identical(_room, roomRef)) {
+        throw StateError('room_changed_after_sdp');
+      }
 
       await pc.setRemoteDescription(RTCSessionDescription(answerSdp, 'answer'));
 
@@ -312,6 +356,18 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
           await pc.close();
         } catch (_) {}
       }
+    }
+
+    // If open failed without throwing (should not happen), never stay without a timer.
+    if (_room != null &&
+        identical(_room, roomRef) &&
+        _route != null &&
+        _route!.isConfigured &&
+        _pc == null &&
+        _refreshTimer == null &&
+        !_busy) {
+      debugPrint('OpenAi translation: pipeline ended without PC and without timer — retry');
+      _scheduleNextRefreshRaw(const Duration(seconds: 4));
     }
   }
 
@@ -361,6 +417,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
     notifyListeners();
 
+    _startWatchdog();
+
     for (final p in room.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
         final t = pub.track;
@@ -388,6 +446,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
   Future<void> _onRemoteTrackEnded() async {
     _cancelScheduledRefresh();
+    _stopWatchdog();
     _cachedRemote = null;
     _boundPublicationSid = null;
     _remoteVoiceHot = false;
@@ -422,6 +481,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
   Future<void> _fullDetachMediaAndTimer() async {
     _cancelScheduledRefresh();
+    _stopWatchdog();
     _cachedRemote = null;
     _boundPublicationSid = null;
     _remoteVoiceHot = false;

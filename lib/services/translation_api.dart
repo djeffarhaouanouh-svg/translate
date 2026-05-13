@@ -66,10 +66,19 @@ DateTime? pickSessionExpiresAt(Map<String, dynamic> j) {
   final cs = j['client_secret'];
   if (cs is Map && cs['expires_at'] != null) {
     final v = cs['expires_at'];
-    if (v is num) n = v;
+    if (v is num) {
+      n = v;
+    } else if (v is String) {
+      n = num.tryParse(v.trim());
+    }
   }
-  if (n == null && j['expires_at'] is num) {
-    n = j['expires_at'] as num;
+  if (n == null && j['expires_at'] != null) {
+    final v = j['expires_at'];
+    if (v is num) {
+      n = v;
+    } else if (v is String) {
+      n = num.tryParse(v.trim());
+    }
   }
   if (n == null) return null;
   final v = n.toDouble();
