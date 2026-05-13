@@ -84,6 +84,14 @@ class _JoinScreenState extends State<JoinScreen> {
       });
       return;
     }
+    if (!RegExp(r'^[a-zA-Z0-9_-]{3,64}$').hasMatch(room)) {
+      setState(() {
+        _busy = false;
+        _error =
+            'Room name must be 3–64 characters: only letters, numbers, _ and - (no spaces or #). Example: dinner-with-sam';
+      });
+      return;
+    }
     try {
       final token = await fetchLiveKitToken(
         roomName: room,

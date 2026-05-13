@@ -16,11 +16,19 @@ class LiveKitTokenResponse {
   final String token;
   final String roomName;
 
+  /// Web (dart2js) can decode JSON values that are not strictly typed as [String]; never use raw `as String`.
   factory LiveKitTokenResponse.fromJson(Map<String, dynamic> j) {
+    String reqStr(String key) {
+      final v = j[key];
+      if (v == null) return '';
+      if (v is String) return v;
+      return v.toString();
+    }
+
     return LiveKitTokenResponse(
-      url: j['url'] as String,
-      token: j['token'] as String,
-      roomName: j['roomName'] as String,
+      url: reqStr('url'),
+      token: reqStr('token'),
+      roomName: reqStr('roomName'),
     );
   }
 }
@@ -53,6 +61,14 @@ Uri _liveKitTokenUri() {
   return Uri.parse('$b/livekit/token');
 }
 
+Map<String, dynamic> _decodeObjectMap(String body) {
+  final decoded = jsonDecode(body);
+  if (decoded is Map) {
+    return Map<String, dynamic>.from(decoded);
+  }
+  throw FormatException('response is not a JSON object');
+}
+
 Future<LiveKitTokenResponse> fetchLiveKitToken({
   required String roomName,
   required String identity,
@@ -75,6 +91,17 @@ Future<LiveKitTokenResponse> fetchLiveKitToken({
   if (res.statusCode != 200) {
     throw TokenApiException(res.body, statusCode: res.statusCode);
   }
-  final map = jsonDecode(res.body) as Map<String, dynamic>;
-  return LiveKitTokenResponse.fromJson(map);
+  try {
+    final map = _decodeObjectMap(res.body);
+    final out = LiveKitTokenResponse.fromJson(map);
+    if (out.url.isEmpty || out.token.isEmpty || out.roomName.isEmpty) {
+      throw TokenApiException(
+        'Token response missing url, token, or roomName: ${res.body.length > 200 ? '${res.body.substring(0, 200)}…' : res.body}',
+        statusCode: res.statusCode,
+      );
+    }
+    return out;
+  } on FormatException catch (e) {
+    throw TokenApiException('Bad JSON from token server: $e', statusCode: res.statusCode);
+  }
 }
