@@ -8,6 +8,7 @@ import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
+import 'friends_list_screen.dart';
 import 'onboarding_screen.dart';
 
 /// Onglet 3 — synchronized with the user's own Supabase `profiles` row plus
@@ -64,6 +65,16 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       _counts = counts;
       _loading = false;
     });
+  }
+
+  Future<void> _openFriendsList(FriendDirection direction) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => FriendsListScreen(direction: direction),
+      ),
+    );
+    // Counts may have changed (follow-back).
+    await _reload();
   }
 
   Future<void> _openEditor() async {
@@ -176,7 +187,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     avatarColor: _avatarColor,
                   ),
                   const SizedBox(height: 24),
-                  _StatsRow(counts: _counts),
+                  _StatsRow(
+                    counts: _counts,
+                    onTapFollowers: () => _openFriendsList(FriendDirection.followers),
+                    onTapFollowing: () => _openFriendsList(FriendDirection.following),
+                  ),
                   const SizedBox(height: 24),
                   _LanguageCard(language: lang),
                   const SizedBox(height: 24),
@@ -266,8 +281,14 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _StatsRow extends StatelessWidget {
-  const _StatsRow({required this.counts});
+  const _StatsRow({
+    required this.counts,
+    required this.onTapFollowers,
+    required this.onTapFollowing,
+  });
   final FriendshipCounts counts;
+  final VoidCallback onTapFollowers;
+  final VoidCallback onTapFollowing;
 
   @override
   Widget build(BuildContext context) {
@@ -277,22 +298,27 @@ class _StatsRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF2A3942)),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      clipBehavior: Clip.antiAlias,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatCell(
-            value: counts.followers,
-            label: AppStrings.t('profile_followers'),
+          Expanded(
+            child: _StatCell(
+              value: counts.followers,
+              label: AppStrings.t('profile_followers'),
+              onTap: onTapFollowers,
+            ),
           ),
           Container(
             width: 1,
-            height: 32,
+            height: 40,
             color: const Color(0xFF2A3942),
           ),
-          _StatCell(
-            value: counts.following,
-            label: AppStrings.t('profile_following'),
+          Expanded(
+            child: _StatCell(
+              value: counts.following,
+              label: AppStrings.t('profile_following'),
+              onTap: onTapFollowing,
+            ),
           ),
         ],
       ),
@@ -301,32 +327,43 @@ class _StatsRow extends StatelessWidget {
 }
 
 class _StatCell extends StatelessWidget {
-  const _StatCell({required this.value, required this.label});
+  const _StatCell({
+    required this.value,
+    required this.label,
+    required this.onTap,
+  });
   final int value;
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$value',
-          style: const TextStyle(
-            color: WhatsAppCallTheme.strongText,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-          ),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$value',
+              style: const TextStyle(
+                color: WhatsAppCallTheme.strongText,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: WhatsAppCallTheme.subtleText,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            color: WhatsAppCallTheme.subtleText,
-            fontSize: 13,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
