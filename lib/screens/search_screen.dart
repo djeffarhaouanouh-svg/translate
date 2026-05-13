@@ -298,44 +298,67 @@ class _ProfileRow extends StatelessWidget {
         ? profile.firstName.characters.first.toUpperCase()
         : '?';
 
-    return ListTile(
-      leading: CircleAvatar(
-        radius: 22,
-        backgroundColor: WhatsAppCallTheme.bar,
-        child: Text(
-          initial,
-          style: const TextStyle(
-            color: WhatsAppCallTheme.strongText,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      title: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Flexible(
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: WhatsAppCallTheme.bar,
             child: Text(
-              profile.firstName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              initial,
               style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          if (lang != null) ...[
-            const SizedBox(width: 8),
-            Text(lang.flag, style: const TextStyle(fontSize: 16)),
-          ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        profile.firstName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: WhatsAppCallTheme.strongText,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    if (lang != null) ...[
+                      const SizedBox(width: 8),
+                      Text(lang.flag, style: const TextStyle(fontSize: 16)),
+                    ],
+                  ],
+                ),
+                if (lang != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Parle ${lang.label}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.subtleText,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _actionForStatus(),
         ],
       ),
-      subtitle: lang != null
-          ? Text(
-              'Parle ${lang.label}',
-              style: const TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
-            )
-          : null,
-      trailing: _actionForStatus(),
     );
   }
 
