@@ -75,6 +75,29 @@ abstract final class ChatApi {
     });
   }
 
+  /// Latest message per conversation that involves [meId]. Used by the
+  /// chat list to render WhatsApp-style "last message" previews and to
+  /// order rows by recent activity.
+  static Future<Map<String, ChatMessage>> fetchLatestPerConversation(
+    String meId, {
+    int limit = 200,
+  }) async {
+    if (meId.isEmpty) return const {};
+    final rows = await _client
+        .from('messages')
+        .select()
+        .or('sender.eq.$meId,recipient.eq.$meId')
+        .order('created_at', ascending: false)
+        .limit(limit);
+    final out = <String, ChatMessage>{};
+    for (final r in rows as List) {
+      final msg = ChatMessage.fromMap(Map<String, dynamic>.from(r as Map));
+      if (msg.conversationId.isEmpty) continue;
+      out.putIfAbsent(msg.conversationId, () => msg);
+    }
+    return out;
+  }
+
   /// Live stream of all messages in a conversation, ordered chronologically
   /// ascending (oldest first, newest last) so the UI can render them
   /// top-to-bottom in chronological order. Re-emits the entire list on

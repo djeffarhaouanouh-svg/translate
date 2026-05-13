@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
@@ -22,6 +23,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String _myId = '';
   List<RemoteProfile> _friends = const [];
+  Map<String, ChatMessage> _latestByConv = const {};
   bool _loading = true;
   String? _error;
 
@@ -83,14 +85,35 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       for (final p in following) {
         byId[p.id] = p;
       }
+
+      // Fetch the latest message for each conversation involving me — used
+      // to render the last-message preview and to sort rows by most-recent
+      // activity (WhatsApp style).
+      final latest = await ChatApi.fetchLatestPerConversation(id);
+
+      String convIdFor(String otherId) {
+        final ids = [id, otherId]..sort();
+        return 'dm-${ids[0]}-${ids[1]}';
+      }
+
       final friends = byId.values.toList()
-        ..sort(
-          (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
-        );
+        ..sort((a, b) {
+          final la = latest[convIdFor(a.id)]?.createdAt;
+          final lb = latest[convIdFor(b.id)]?.createdAt;
+          if (la == null && lb == null) {
+            return a.displayName
+                .toLowerCase()
+                .compareTo(b.displayName.toLowerCase());
+          }
+          if (la == null) return 1; // peers without messages sink to the bottom
+          if (lb == null) return -1;
+          return lb.compareTo(la); // most recent first
+        });
       if (!mounted) return;
       setState(() {
         _myId = id;
         _friends = friends;
+        _latestByConv = latest;
         _loading = false;
       });
     } catch (e) {
@@ -174,7 +197,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
         itemBuilder: (ctx, i) {
           final p = _friends[i];
-          return _FriendChatRow(profile: p, onTap: () => _openThread(p));
+          final last = _latestByConv[_conversationIdFor(p.id)];
+          return _FriendChatRow(
+            profile: p,
+            lastMessage: last,
+            isMine: last?.senderId == _myId,
+            onTap: () => _openThread(p),
+          );
         },
       ),
     );
@@ -182,9 +211,38 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 }
 
 class _FriendChatRow extends StatelessWidget {
-  const _FriendChatRow({required this.profile, required this.onTap});
+  const _FriendChatRow({
+    required this.profile,
+    required this.lastMessage,
+    required this.isMine,
+    required this.onTap,
+  });
   final RemoteProfile profile;
+  final ChatMessage? lastMessage;
+  final bool isMine;
   final VoidCallback onTap;
+
+  String _formatTime(DateTime dt) {
+    final now = DateTime.now();
+    final isSameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    if (isSameDay) {
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      return '$h:$m';
+    }
+    final yesterday = now.subtract(const Duration(days: 1));
+    final wasYesterday =
+        dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day;
+    if (wasYesterday) return 'hier';
+    final daysAgo = now.difference(dt).inDays;
+    if (daysAgo < 7) {
+      const weekdays = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+      return weekdays[(dt.weekday - 1).clamp(0, 6)];
+    }
+    final d = dt.day.toString().padLeft(2, '0');
+    final mo = dt.month.toString().padLeft(2, '0');
+    return '$d/$mo';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,6 +251,24 @@ class _FriendChatRow extends StatelessWidget {
         ? profile.displayName
         : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
     final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
+
+    final subtitleParts = <InlineSpan>[];
+    if (lastMessage != null && lastMessage!.body.isNotEmpty) {
+      if (isMine) {
+        subtitleParts.add(const TextSpan(
+          text: 'Vous : ',
+          style: TextStyle(
+            color: WhatsAppCallTheme.subtleText,
+            fontWeight: FontWeight.w500,
+          ),
+        ));
+      }
+      subtitleParts.add(TextSpan(text: lastMessage!.body));
+    } else if (lang != null) {
+      subtitleParts.add(TextSpan(text: '${lang.flag}  ${lang.label}'));
+    } else {
+      subtitleParts.add(const TextSpan(text: 'Toucher pour discuter'));
+    }
 
     return InkWell(
       onTap: onTap,
@@ -224,37 +300,48 @@ class _FriendChatRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: false,
-                    style: const TextStyle(
-                      color: WhatsAppCallTheme.strongText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                          style: const TextStyle(
+                            color: WhatsAppCallTheme.strongText,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      if (lastMessage != null) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          _formatTime(lastMessage!.createdAt),
+                          style: const TextStyle(
+                            color: WhatsAppCallTheme.subtleText,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    lang != null
-                        ? '${lang.flag}  ${lang.label}'
-                        : 'Toucher pour discuter',
+                  RichText(
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
-                    style: const TextStyle(
-                      color: WhatsAppCallTheme.subtleText,
-                      fontSize: 13,
+                    text: TextSpan(
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.subtleText,
+                        fontSize: 13,
+                      ),
+                      children: subtitleParts,
                     ),
                   ),
                 ],
               ),
-            ),
-            const Icon(
-              Icons.chevron_right,
-              color: WhatsAppCallTheme.subtleText,
-              size: 22,
             ),
           ],
         ),
