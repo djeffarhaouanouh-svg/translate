@@ -643,21 +643,21 @@ class _RoundCallButton extends StatelessWidget {
         Material(
           color: background,
           shape: const CircleBorder(),
-          elevation: 3,
+          elevation: 4,
           shadowColor: Colors.black54,
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Icon(icon, color: Colors.white, size: 22),
+              padding: const EdgeInsets.all(20),
+              child: Icon(icon, color: Colors.white, size: 28),
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 11),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 12),
         ),
       ],
     );
