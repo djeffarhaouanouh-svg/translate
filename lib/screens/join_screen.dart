@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
+import '../services/app_strings.dart';
 import '../services/languages.dart';
 import '../services/token_api.dart';
 import '../services/user_prefs.dart';
@@ -76,22 +77,21 @@ class _JoinScreenState extends State<JoinScreen> {
     if (room.length < 3 || name.isEmpty) {
       setState(() {
         _busy = false;
-        _error = 'Entre un nom de room (3+ caractères) et ton prénom.';
+        _error = AppStrings.t('join_error_room');
       });
       return;
     }
     if (!RegExp(r'^[a-zA-Z0-9_-]{3,64}$').hasMatch(room)) {
       setState(() {
         _busy = false;
-        _error =
-            'Le nom de room doit faire 3 à 64 caractères : lettres, chiffres, _ et - uniquement (pas d\'espace ni #). Exemple : diner-avec-sam';
+        _error = AppStrings.t('join_error_room_format');
       });
       return;
     }
     if (_sourceLang.isEmpty) {
       setState(() {
         _busy = false;
-        _error = 'Choisis ta langue dans ton profil avant de rejoindre.';
+        _error = AppStrings.t('join_error_lang');
       });
       return;
     }
@@ -145,17 +145,16 @@ class _JoinScreenState extends State<JoinScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Rejoindre une room',
+                    AppStrings.t('join_title'),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: WhatsAppCallTheme.strongText,
                           fontWeight: FontWeight.w600,
                         ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Choisis un nom de room et partage-le avec une autre personne. '
-                    'Vous devez utiliser le même nom pour vous retrouver en 1-on-1.',
-                    style: TextStyle(
+                  Text(
+                    AppStrings.t('join_desc'),
+                    style: const TextStyle(
                       color: WhatsAppCallTheme.subtleText,
                       height: 1.4,
                       fontSize: 14,
@@ -170,10 +169,10 @@ class _JoinScreenState extends State<JoinScreen> {
                           textCapitalization: TextCapitalization.none,
                           autocorrect: false,
                           style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                          decoration: const InputDecoration(
-                            labelText: 'Nom de la room',
-                            hintText: 'ex. diner-avec-sam',
-                            prefixIcon: Icon(Icons.tag, color: WhatsAppCallTheme.subtleText),
+                          decoration: InputDecoration(
+                            labelText: AppStrings.t('join_room_label'),
+                            hintText: AppStrings.t('join_room_hint'),
+                            prefixIcon: const Icon(Icons.tag, color: WhatsAppCallTheme.subtleText),
                           ),
                         ),
                         const Divider(height: 24),
@@ -181,10 +180,10 @@ class _JoinScreenState extends State<JoinScreen> {
                           controller: _nameCtrl,
                           textCapitalization: TextCapitalization.words,
                           style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                          decoration: const InputDecoration(
-                            labelText: 'Ton prénom',
-                            hintText: 'Comme les autres te verront',
-                            prefixIcon: Icon(Icons.person_outline, color: WhatsAppCallTheme.subtleText),
+                          decoration: InputDecoration(
+                            labelText: AppStrings.t('join_name_label'),
+                            hintText: AppStrings.t('join_name_hint'),
+                            prefixIcon: const Icon(Icons.person_outline, color: WhatsAppCallTheme.subtleText),
                           ),
                         ),
                       ],
@@ -226,13 +225,13 @@ class _JoinScreenState extends State<JoinScreen> {
                               color: WhatsAppCallTheme.onAccent,
                             ),
                           )
-                        : const Row(
+                        : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.videocam_rounded, size: 22),
-                              SizedBox(width: 10),
-                              Text('Démarrer l\'appel'),
+                              const Icon(Icons.videocam_rounded, size: 22),
+                              const SizedBox(width: 10),
+                              Text(AppStrings.t('join_button')),
                             ],
                           ),
                   ),
@@ -273,7 +272,9 @@ class _LanguageSummaryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  language != null ? 'Tu parles ${language!.label}' : 'Aucune langue choisie',
+                  language != null
+                      ? AppStrings.t('join_speak', args: {'lang': language!.label})
+                      : AppStrings.t('join_no_lang'),
                   style: const TextStyle(
                     color: WhatsAppCallTheme.strongText,
                     fontWeight: FontWeight.w500,
@@ -281,9 +282,9 @@ class _LanguageSummaryCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'La langue de l\'autre est détectée automatiquement.',
-                  style: TextStyle(
+                Text(
+                  AppStrings.t('join_lang_subtitle'),
+                  style: const TextStyle(
                     color: WhatsAppCallTheme.subtleText,
                     fontSize: 12,
                     height: 1.3,
@@ -294,7 +295,7 @@ class _LanguageSummaryCard extends StatelessWidget {
           ),
           IconButton(
             onPressed: onEdit,
-            tooltip: 'Modifier ton profil',
+            tooltip: AppStrings.t('join_edit_profile'),
             icon: const Icon(Icons.edit_outlined, color: WhatsAppCallTheme.subtleText),
           ),
         ],
@@ -339,8 +340,8 @@ class _WhatsAppCallHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Calls',
-                          style: TextStyle(
+                          AppStrings.t('join_header_title'),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
@@ -348,8 +349,8 @@ class _WhatsAppCallHeader extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'LiveKit · 1-on-1',
-                          style: TextStyle(
+                          AppStrings.t('join_header_subtitle'),
+                          style: const TextStyle(
                             color: Color(0xFFB8E0D8),
                             fontSize: 13,
                           ),
@@ -360,7 +361,7 @@ class _WhatsAppCallHeader extends StatelessWidget {
                   if (onEditProfile != null)
                     IconButton(
                       onPressed: onEditProfile,
-                      tooltip: 'Ton profil',
+                      tooltip: AppStrings.t('join_header_profile_tooltip'),
                       icon: Icon(
                         Icons.manage_accounts_outlined,
                         color: Colors.white.withValues(alpha: 0.92),
@@ -370,7 +371,7 @@ class _WhatsAppCallHeader extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                'Token server: $apiBase',
+                AppStrings.t('join_header_token_server', args: {'api': apiBase}),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(

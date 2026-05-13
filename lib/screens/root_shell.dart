@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/app_strings.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import 'chat_screen.dart';
@@ -25,31 +26,31 @@ class _RootShellState extends State<RootShell> {
     const SearchScreen(),
     JoinScreen(translation: widget.translation),
     const ChatScreen(),
-    const _PlaceholderTab(title: 'Onglet 3'),
+    _PlaceholderTab(title: AppStrings.t('nav_tab3')),
   ];
 
-  static const List<NavigationDestination> _destinations = <NavigationDestination>[
-    NavigationDestination(
-      icon: Icon(Icons.search),
-      selectedIcon: Icon(Icons.manage_search),
-      label: 'Recherche',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.call_outlined),
-      selectedIcon: Icon(Icons.call),
-      label: 'Appel',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.chat_bubble_outline),
-      selectedIcon: Icon(Icons.chat_bubble),
-      label: 'Chat',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.circle_outlined),
-      selectedIcon: Icon(Icons.circle),
-      label: 'Onglet 3',
-    ),
-  ];
+  List<NavigationDestination> get _destinations => <NavigationDestination>[
+        NavigationDestination(
+          icon: const Icon(Icons.search),
+          selectedIcon: const Icon(Icons.manage_search),
+          label: AppStrings.t('nav_search'),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.call_outlined),
+          selectedIcon: const Icon(Icons.call),
+          label: AppStrings.t('nav_call'),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.chat_bubble_outline),
+          selectedIcon: const Icon(Icons.chat_bubble),
+          label: AppStrings.t('nav_chat'),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.circle_outlined),
+          selectedIcon: const Icon(Icons.circle),
+          label: AppStrings.t('nav_tab3'),
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -76,10 +77,10 @@ class _PlaceholderTab extends StatelessWidget {
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
       appBar: AppBar(title: Text(title)),
-      body: const Center(
+      body: Center(
         child: Text(
-          'Bientôt',
-          style: TextStyle(
+          AppStrings.t('tab_placeholder_soon'),
+          style: const TextStyle(
             color: WhatsAppCallTheme.subtleText,
             fontSize: 18,
           ),

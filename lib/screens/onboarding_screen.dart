@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/app_strings.dart';
 import '../services/device_id.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
@@ -49,6 +50,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
+  /// Flip the UI to the newly chosen language immediately, even while the
+  /// user is still on the language picker, so the "Save / Get started"
+  /// button label updates in real time.
+  void _onLanguageSelected(String code) {
+    AppStrings.setFromCode(code);
+    setState(() => _selectedLang = code);
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -60,13 +69,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Entre ton prénom.')),
+        SnackBar(content: Text(AppStrings.t('onb_need_name'))),
       );
       return;
     }
     if (_selectedLang == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choisis la langue que tu parles.')),
+        SnackBar(content: Text(AppStrings.t('onb_need_language'))),
       );
       return;
     }
@@ -76,6 +85,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // Other person's language is now discovered live from their metadata.
       targetLang: '',
     );
+    // Make the rest of the app speak the user's chosen language right away.
+    AppStrings.setFromCode(_selectedLang!);
     // Mirror to Supabase so other users can discover this profile in search.
     // Best-effort: failure here does not block onboarding.
     final deviceId = await DeviceId.getOrCreate();
@@ -94,7 +105,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return Scaffold(
         backgroundColor: WhatsAppCallTheme.scaffold,
         appBar: AppBar(
-          title: const Text('Ton profil'),
+          title: Text(AppStrings.t('onb_profile_title')),
           backgroundColor: WhatsAppCallTheme.waHeader,
           foregroundColor: Colors.white,
         ),
@@ -108,16 +119,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   controller: _nameCtrl,
                   textCapitalization: TextCapitalization.words,
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                  decoration: const InputDecoration(
-                    labelText: 'Prénom',
-                    hintText: 'ex. Alex',
-                    prefixIcon: Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
+                  decoration: InputDecoration(
+                    labelText: AppStrings.t('onb_first_name_label'),
+                    hintText: AppStrings.t('onb_first_name_hint'),
+                    prefixIcon: const Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'La langue que tu parles',
-                  style: TextStyle(
+                Text(
+                  AppStrings.t('onb_language_picker_label'),
+                  style: const TextStyle(
                     color: WhatsAppCallTheme.strongText,
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
@@ -126,12 +137,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: 12),
                 _LanguageGrid(
                   selected: _selectedLang,
-                  onSelect: (code) => setState(() => _selectedLang = code),
+                  onSelect: _onLanguageSelected,
                 ),
                 const SizedBox(height: 28),
                 FilledButton(
                   onPressed: _finish,
-                  child: const Text('Enregistrer'),
+                  child: Text(AppStrings.t('onb_save')),
                 ),
               ],
             ),
@@ -158,7 +169,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onNext: () {
                       if (_nameCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Entre ton prénom.')),
+                          SnackBar(content: Text(AppStrings.t('onb_need_name'))),
                         );
                         return;
                       }
@@ -170,7 +181,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   _StepLanguage(
                     selected: _selectedLang,
-                    onSelect: (code) => setState(() => _selectedLang = code),
+                    onSelect: _onLanguageSelected,
                     onBack: () => _pageController.previousPage(
                       duration: const Duration(milliseconds: 280),
                       curve: Curves.easeOutCubic,
@@ -202,7 +213,9 @@ class _OnboardingHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              page == 0 ? 'Bienvenue' : 'Ta langue',
+              page == 0
+                  ? AppStrings.t('onb_welcome_title')
+                  : AppStrings.t('onb_language_title'),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 24,
@@ -212,8 +225,8 @@ class _OnboardingHeader extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               page == 0
-                  ? 'Dis-nous comment t\'appeler dans les appels.'
-                  : 'Choisis la langue que tu parles. La langue de l\'autre est détectée automatiquement quand il rejoint l\'appel.',
+                  ? AppStrings.t('onb_welcome_subtitle')
+                  : AppStrings.t('onb_language_subtitle'),
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.85),
                 fontSize: 14,
@@ -274,16 +287,16 @@ class _StepWelcome extends StatelessWidget {
             controller: nameCtrl,
             textCapitalization: TextCapitalization.words,
             style: const TextStyle(color: WhatsAppCallTheme.strongText, fontSize: 16),
-            decoration: const InputDecoration(
-              labelText: 'Prénom',
-              hintText: 'ex. Alex',
-              prefixIcon: Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
+            decoration: InputDecoration(
+              labelText: AppStrings.t('onb_first_name_label'),
+              hintText: AppStrings.t('onb_first_name_hint'),
+              prefixIcon: const Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
             ),
           ),
           const SizedBox(height: 28),
           FilledButton(
             onPressed: onNext,
-            child: const Text('Suivant'),
+            child: Text(AppStrings.t('onb_next')),
           ),
         ],
       ),
@@ -313,19 +326,19 @@ class _StepLanguage extends StatelessWidget {
         children: [
           _LanguageGrid(selected: selected, onSelect: onSelect),
           const SizedBox(height: 12),
-          const Text(
-            'En appel, on traduira automatiquement la voix de l\'autre dans ta langue, et la tienne dans la sienne.',
-            style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13, height: 1.4),
+          Text(
+            AppStrings.t('onb_translation_help'),
+            style: const TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13, height: 1.4),
           ),
           const SizedBox(height: 28),
           Row(
             children: [
-              TextButton(onPressed: onBack, child: const Text('Retour')),
+              TextButton(onPressed: onBack, child: Text(AppStrings.t('onb_back'))),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
                   onPressed: onFinish,
-                  child: const Text('Commencer'),
+                  child: Text(AppStrings.t('onb_finish')),
                 ),
               ),
             ],
