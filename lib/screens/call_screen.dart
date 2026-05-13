@@ -41,6 +41,9 @@ class _CallScreenState extends State<CallScreen> {
   bool _connecting = true;
   bool _micOn = true;
   bool _camOn = true;
+  /// When true, the local self-view fills the screen and the remote feed
+  /// lives in the small PiP. Tap either to swap back.
+  bool _selfMain = false;
   EventsListener<RoomEvent>? _roomEvents;
 
   /// The remote BCP-47 we have attached the translation pipeline with, so we
@@ -200,6 +203,15 @@ class _CallScreenState extends State<CallScreen> {
     final id = p.identity;
     if (id.length > 14) return '${id.substring(0, 14)}…';
     return id;
+  }
+
+  /// Whether we should draw the small PiP at all. We need:
+  /// - a local feed (and the local cam to be on) if we are NOT swapped, OR
+  /// - a remote feed if we ARE swapped (so the user does not get stuck with
+  ///   an empty PiP that they cannot tap to revert).
+  bool _pipFeedAvailable({VideoTrack? local, VideoTrack? remote}) {
+    if (_selfMain) return remote != null;
+    return local != null && _camOn;
   }
 
   VideoTrack? _remoteVideo(Room room) {
@@ -389,7 +401,20 @@ class _CallScreenState extends State<CallScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (remote != null)
+                // Main video: remote by default, local when swapped. Tapping
+                // it (when there is also a PiP to swap with) flips the views.
+                if (_selfMain && local != null && _camOn)
+                  GestureDetector(
+                    onTap: remote != null
+                        ? () => setState(() => _selfMain = false)
+                        : null,
+                    child: VideoTrackRenderer(
+                      local,
+                      fit: VideoViewFit.cover,
+                      mirrorMode: VideoViewMirrorMode.mirror,
+                    ),
+                  )
+                else if (remote != null)
                   VideoTrackRenderer(
                     remote,
                     fit: VideoViewFit.cover,
@@ -470,30 +495,40 @@ class _CallScreenState extends State<CallScreen> {
                       ),
                     ),
                   ),
-                if (local != null && _camOn)
+                // PiP: shows whichever feed is NOT the main one. Tap to swap.
+                if (_pipFeedAvailable(local: local, remote: remote))
                   Positioned(
                     top: MediaQuery.paddingOf(context).top + 52,
                     right: 12,
                     width: 118,
                     height: 176,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white30, width: 1.5),
-                          color: Colors.black,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.45),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: VideoTrackRenderer(
-                          local,
-                          fit: VideoViewFit.cover,
-                          mirrorMode: VideoViewMirrorMode.mirror,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selfMain = !_selfMain),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white30, width: 1.5),
+                            color: Colors.black,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: _selfMain && remote != null
+                              ? VideoTrackRenderer(
+                                  remote,
+                                  fit: VideoViewFit.cover,
+                                  mirrorMode: VideoViewMirrorMode.off,
+                                )
+                              : VideoTrackRenderer(
+                                  local!,
+                                  fit: VideoViewFit.cover,
+                                  mirrorMode: VideoViewMirrorMode.mirror,
+                                ),
                         ),
                       ),
                     ),
