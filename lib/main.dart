@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'screens/onboarding_screen.dart';
 import 'screens/root_shell.dart';
 import 'services/app_strings.dart';
+import 'services/device_id.dart';
+import 'services/profile_api.dart';
 import 'services/supabase_service.dart';
 import 'services/user_prefs.dart';
 import 'theme/whatsapp_call_theme.dart';
@@ -46,6 +50,19 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
     final profile = await UserPrefs.loadProfile();
     if (profile != null && profile.sourceLang.isNotEmpty) {
       AppStrings.setFromCode(profile.sourceLang);
+    }
+    // Auto-sync the local profile to Supabase on every launch. Onboarding
+    // already does this on save, but users who completed onboarding before
+    // the column-name fix landed have a local profile that was never pushed
+    // to the `profiles` table — without this, friend search would never
+    // find them. Fire-and-forget: failure does not block startup.
+    if (profile != null && profile.firstName.isNotEmpty) {
+      final deviceId = await DeviceId.getOrCreate();
+      unawaited(ProfileApi.upsertMyProfile(
+        deviceId: deviceId,
+        displayName: profile.firstName,
+        language: profile.sourceLang,
+      ));
     }
     if (!mounted) return;
     setState(() {
