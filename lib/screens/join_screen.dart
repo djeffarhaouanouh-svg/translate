@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
 import '../services/token_api.dart';
+import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../translation/translation_route.dart';
 import 'call_screen.dart';
+import 'onboarding_screen.dart';
 
 class JoinScreen extends StatefulWidget {
   const JoinScreen({super.key, this.translation = const NoOpRealtimeTranslation()});
@@ -25,6 +27,34 @@ class _JoinScreenState extends State<JoinScreen> {
   final _targetLangCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyStoredProfile());
+  }
+
+  Future<void> _applyStoredProfile() async {
+    final snap = await UserPrefs.loadProfile();
+    if (!mounted || snap == null) return;
+    setState(() {
+      _nameCtrl.text = snap.firstName;
+      _sourceLangCtrl.text = snap.sourceLang;
+      _targetLangCtrl.text = snap.targetLang;
+    });
+  }
+
+  Future<void> _openProfileEditor() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (ctx) => OnboardingScreen(
+          editing: true,
+          onCompleted: () => Navigator.of(ctx).pop(),
+        ),
+      ),
+    );
+    await _applyStoredProfile();
+  }
 
   @override
   void dispose() {
@@ -95,7 +125,10 @@ class _JoinScreenState extends State<JoinScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _WhatsAppCallHeader(apiBase: apiBase),
+          _WhatsAppCallHeader(
+            apiBase: apiBase,
+            onEditProfile: _openProfileEditor,
+          ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
@@ -117,6 +150,16 @@ class _JoinScreenState extends State<JoinScreen> {
                       color: WhatsAppCallTheme.subtleText,
                       height: 1.4,
                       fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'There is no friend list yet: agree on a room name together (like a shared code), '
+                    'then both tap Start video call.',
+                    style: TextStyle(
+                      color: WhatsAppCallTheme.subtleText.withValues(alpha: 0.85),
+                      height: 1.35,
+                      fontSize: 12,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -256,9 +299,13 @@ class _JoinScreenState extends State<JoinScreen> {
 }
 
 class _WhatsAppCallHeader extends StatelessWidget {
-  const _WhatsAppCallHeader({required this.apiBase});
+  const _WhatsAppCallHeader({
+    required this.apiBase,
+    this.onEditProfile,
+  });
 
   final String apiBase;
+  final VoidCallback? onEditProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +329,7 @@ class _WhatsAppCallHeader extends StatelessWidget {
                     child: const Icon(Icons.videocam, color: Colors.white, size: 28),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -305,6 +352,15 @@ class _WhatsAppCallHeader extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (onEditProfile != null)
+                    IconButton(
+                      onPressed: onEditProfile,
+                      tooltip: 'Your profile',
+                      icon: Icon(
+                        Icons.manage_accounts_outlined,
+                        color: Colors.white.withValues(alpha: 0.92),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 14),
