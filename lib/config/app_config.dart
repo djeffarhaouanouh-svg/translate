@@ -18,3 +18,12 @@ String displayTokenApiBase() {
   if (kIsWeb) return Uri.base.removeFragment().origin;
   return resolvedTokenApiBase();
 }
+
+/// Supabase project URL. Passed in at build time via `--dart-define`.
+/// Empty when unset → Supabase init is skipped (the rest of the app works fine).
+String resolvedSupabaseUrl() =>
+    const String.fromEnvironment('SUPABASE_URL');
+
+/// Supabase publishable / anon key. Safe to ship to clients.
+String resolvedSupabasePublishableKey() =>
+    const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');

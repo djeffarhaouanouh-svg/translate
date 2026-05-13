@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'screens/onboarding_screen.dart';
 import 'screens/root_shell.dart';
+import 'services/supabase_service.dart';
 import 'services/user_prefs.dart';
 import 'theme/whatsapp_call_theme.dart';
 import 'translation/openai_realtime_translation.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initSupabase();
   runApp(const LiveKitTranslateApp());
 }
 
