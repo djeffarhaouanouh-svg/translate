@@ -61,16 +61,13 @@ abstract final class ChatApi {
     required String conversationId,
     required String senderId,
     required String senderName,
+    required String recipientId,
     required String body,
   }) async {
-    // Write to `sender` (the existing NOT-NULL column on the deployed
-    // table). `sender_id` is kept as a duplicate write for forward-compat:
-    // if it does not exist Postgres ignores extra fields? No — it errors.
-    // So write only the canonical column name. If user's schema later
-    // renames it, adjust here.
     await _client.from('messages').insert({
       'conversation_id': conversationId,
       'sender': senderId,
+      'recipient': recipientId,
       'sender_name': senderName,
       'body': body,
     });

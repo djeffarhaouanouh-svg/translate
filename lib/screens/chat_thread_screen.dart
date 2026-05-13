@@ -15,10 +15,16 @@ class ChatThreadScreen extends StatefulWidget {
     super.key,
     required this.conversationId,
     required this.title,
+    required this.peerDeviceId,
   });
 
   final String conversationId;
   final String title;
+
+  /// The other party's device id — sent with every message as `recipient`
+  /// so the deployed messages schema (DM-style, NOT-NULL recipient column)
+  /// accepts inserts.
+  final String peerDeviceId;
 
   @override
   State<ChatThreadScreen> createState() => _ChatThreadScreenState();
@@ -98,6 +104,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         conversationId: widget.conversationId,
         senderId: _myId,
         senderName: _myName.isEmpty ? 'Moi' : _myName,
+        recipientId: widget.peerDeviceId,
         body: body,
       );
       _inputCtrl.clear();

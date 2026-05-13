@@ -111,6 +111,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         builder: (_) => ChatThreadScreen(
           conversationId: convId,
           title: title,
+          peerDeviceId: peer.id,
         ),
       ),
     );
