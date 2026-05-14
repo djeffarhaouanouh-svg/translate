@@ -313,16 +313,38 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.only(right: 8),
           child: Center(
-            child: _TranslatePill(active: autoTranslate, onTap: onToggleTranslate),
+            child: GestureDetector(
+              onTap: onToggleTranslate,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.translate,
+                    size: 18,
+                    color: autoTranslate
+                        ? WhatsAppCallTheme.accent
+                        : Colors.white.withValues(alpha: 0.78),
+                  ),
+                  const SizedBox(width: 6),
+                  _TranslatePill(
+                    active: autoTranslate,
+                    onTap: onToggleTranslate,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
+        const SizedBox(width: 12),
         IconButton(
           tooltip: 'Appel vidéo',
           onPressed: onCall,
           icon: const Icon(Icons.videocam_outlined),
         ),
+        const SizedBox(width: 4),
       ],
     );
   }
@@ -340,7 +362,6 @@ class _TranslatePill extends StatelessWidget {
     const w = 44.0;
     const h = 22.0;
     const ball = 18.0;
-    final orbColor = active ? const Color(0xFFFF6A00) : WhatsAppCallTheme.subtleText;
     return Tooltip(
       message: active ? 'Traduction auto activée' : 'Traduire les messages',
       child: GestureDetector(
@@ -366,14 +387,17 @@ class _TranslatePill extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: active
                     ? const RadialGradient(
-                        colors: [Color(0xFFFFC15A), Color(0xFFFF6A00)],
+                        colors: [
+                          WhatsAppCallTheme.accent,
+                          WhatsAppCallTheme.accentMuted,
+                        ],
                       )
                     : null,
                 color: active ? null : Colors.white.withValues(alpha: 0.35),
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color: orbColor.withValues(alpha: 0.55),
+                          color: WhatsAppCallTheme.accent.withValues(alpha: 0.55),
                           blurRadius: 10,
                           spreadRadius: 1,
                         ),
