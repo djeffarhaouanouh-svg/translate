@@ -158,7 +158,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
-      body: SafeArea(bottom: false, child: _buildBody()),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Messages',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ),
     );
   }
 
@@ -269,16 +291,16 @@ class _FriendChatRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             ProfileAvatar(
               displayName: profile.displayName,
               avatarUrl: profile.avatarUrl,
               avatarColorHex: profile.avatarColor,
-              size: 48,
+              size: 60,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,7 +318,7 @@ class _FriendChatRow extends StatelessWidget {
                           style: const TextStyle(
                             color: WhatsAppCallTheme.strongText,
                             fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                            fontSize: 17,
                           ),
                         ),
                       ),
@@ -306,13 +328,13 @@ class _FriendChatRow extends StatelessWidget {
                           _formatTime(lastMessage!.createdAt),
                           style: const TextStyle(
                             color: WhatsAppCallTheme.subtleText,
-                            fontSize: 11,
+                            fontSize: 12,
                           ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   RichText(
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -320,7 +342,7 @@ class _FriendChatRow extends StatelessWidget {
                     text: TextSpan(
                       style: const TextStyle(
                         color: WhatsAppCallTheme.subtleText,
-                        fontSize: 13,
+                        fontSize: 14,
                       ),
                       children: subtitleParts,
                     ),
