@@ -286,6 +286,73 @@ app.post('/translation/realtime/session', async (req, res) => {
   }
 });
 
+/**
+ * POST /translation/text
+ * Body: { text: "...", from?: "fr", to: "en" } (BCP-47 primary subtag)
+ * Returns: { translated: "..." }
+ * Cheap one-shot text translation via gpt-4.1-mini Chat Completions. Used
+ * by the in-app "auto-translate messages" toggle to render each foreign
+ * message in the reader's language.
+ */
+app.post('/translation/text', async (req, res) => {
+  try {
+    assertOpenAI();
+  } catch (e) {
+    return res.status(500).json({ error: 'openai_misconfigured' });
+  }
+  const rawText = typeof req.body?.text === 'string' ? req.body.text : '';
+  const text = rawText.trim().slice(0, 4000);
+  const from = primaryLanguageTag(req.body?.from);
+  const to = primaryLanguageTag(req.body?.to);
+  if (!text || !isReasonableLanguageTag(to)) {
+    return res.status(400).json({ error: 'invalid_input' });
+  }
+  if (from && from === to) {
+    // Source and target match — no translation needed.
+    return res.json({ translated: text });
+  }
+  try {
+    const sys =
+      `You are a translator. Translate the user's message into ${to}. ` +
+      `Reply with the translated text ONLY, no quotes, no explanation, ` +
+      `no language tags. Preserve emojis and proper nouns. If the message ` +
+      `is already in ${to}, return it unchanged.`;
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: text },
+        ],
+        temperature: 0.2,
+      }),
+    });
+    const body = await r.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(body);
+    } catch (_) {
+      return res
+        .status(502)
+        .json({ error: 'openai_bad_response', body: body.slice(0, 200) });
+    }
+    if (!r.ok) {
+      return res.status(r.status).json({ error: 'openai_error', detail: parsed });
+    }
+    const translated = parsed?.choices?.[0]?.message?.content ?? '';
+    return res.json({ translated });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('translation text', e);
+    return res.status(502).json({ error: 'openai_unreachable' });
+  }
+});
+
 if (hasWebUi) {
   app.use(express.static(webPath));
   app.use((req, res, next) => {

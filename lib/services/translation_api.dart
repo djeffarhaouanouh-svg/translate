@@ -52,6 +52,25 @@ Uri _translationCallsUri() {
   return Uri.parse('$b/translation/realtime/calls');
 }
 
+Uri _translationTextUri() {
+  const fromEnv = String.fromEnvironment('TOKEN_API_BASE');
+  if (fromEnv.isNotEmpty) {
+    final b = fromEnv.replaceAll(RegExp(r'/$'), '');
+    return Uri.parse('$b/translation/text');
+  }
+  if (kIsWeb) {
+    final o = Uri.base.removeFragment();
+    return Uri(
+      scheme: o.scheme,
+      host: o.host,
+      port: o.hasPort ? o.port : null,
+      path: '/translation/text',
+    );
+  }
+  final b = resolvedTokenApiBase().replaceAll(RegExp(r'/$'), '');
+  return Uri.parse('$b/translation/text');
+}
+
 Map<String, dynamic> _decodeObjectMap(String body) {
   final decoded = jsonDecode(body);
   if (decoded is Map) {
@@ -144,4 +163,35 @@ Future<String> postTranslationCallsSdp({
     );
   }
   return res.body;
+}
+
+/// One-shot text translation via the backend (`/translation/text` →
+/// OpenAI Chat Completions). Returns the translated string; falls back to
+/// the original [text] on any error so the UI never goes blank.
+Future<String> fetchTextTranslation({
+  required String text,
+  required String to,
+  String? from,
+}) async {
+  if (text.trim().isEmpty) return text;
+  final uri = _translationTextUri();
+  try {
+    final res = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'text': text,
+        if (from != null && from.isNotEmpty) 'from': from,
+        'to': to,
+      }),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return text;
+    }
+    final j = _decodeObjectMap(res.body);
+    final t = j['translated'];
+    return t is String && t.isNotEmpty ? t : text;
+  } catch (_) {
+    return text;
+  }
 }

@@ -7,6 +7,7 @@ import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
+import '../services/translation_api.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
@@ -51,10 +52,78 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _sending = false;
   String? _error;
 
+  /// When true, replace each foreign-language message body with its
+  /// translation into [_myLang]. Translations are cached by message id so we
+  /// only hit OpenAI once per message.
+  bool _autoTranslate = false;
+  final Map<String, String> _translations = {};
+  final Set<String> _translatingIds = {};
+
   @override
   void initState() {
     super.initState();
     _bootstrap();
+  }
+
+  /// Toggle the auto-translate state. On turn-on, kick translation for all
+  /// visible foreign-language messages.
+  void _toggleAutoTranslate() {
+    setState(() => _autoTranslate = !_autoTranslate);
+    if (_autoTranslate) _ensureTranslationsForCurrent();
+  }
+
+  /// For every message in [_messages] whose language differs from mine and
+  /// is not yet cached or in flight, fetch the translation and rebuild.
+  void _ensureTranslationsForCurrent() {
+    if (_myLang.isEmpty) return;
+    for (final m in _messages) {
+      _maybeFetchTranslation(m);
+    }
+  }
+
+  void _maybeFetchTranslation(ChatMessage m) {
+    if (!_autoTranslate || _myLang.isEmpty) return;
+    final id = m.id;
+    if (id.isEmpty) return;
+    final lang = _messageLang(m);
+    if (lang == _myLang) return; // already in my language
+    if (_translations.containsKey(id) || _translatingIds.contains(id)) return;
+    _translatingIds.add(id);
+    () async {
+      try {
+        final out = await fetchTextTranslation(
+          text: m.body,
+          to: _myLang,
+          from: lang.isEmpty ? null : lang,
+        );
+        if (!mounted) return;
+        setState(() {
+          _translations[id] = out;
+          _translatingIds.remove(id);
+        });
+      } catch (_) {
+        if (mounted) {
+          setState(() => _translatingIds.remove(id));
+        }
+      }
+    }();
+  }
+
+  /// Best-effort message language: prefer the explicit column we send when
+  /// inserting; fall back to the sender's profile language ("their lang")
+  /// if needed. Empty if unknown.
+  String _messageLang(ChatMessage m) {
+    // ChatMessage doesn't expose the language column today; use the peer's
+    // language when the sender is the peer, else my language.
+    if (m.senderId == _myId) return _myLang;
+    return _peer?.language.trim() ?? '';
+  }
+
+  String _displayBodyFor(ChatMessage m) {
+    if (!_autoTranslate) return m.body;
+    final translated = _translations[m.id];
+    if (translated != null && translated.isNotEmpty) return translated;
+    return m.body;
   }
 
   Future<void> _bootstrap() async {
@@ -79,6 +148,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       (rows) {
         if (!mounted) return;
         setState(() => _messages = rows);
+        // If auto-translate is on, kick translations for the new arrivals.
+        if (_autoTranslate) {
+          for (final m in rows) {
+            _maybeFetchTranslation(m);
+          }
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       },
       onError: (e) {
@@ -138,6 +213,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       appBar: _ThreadHeader(
         title: widget.title,
         peer: _peer,
+        autoTranslate: _autoTranslate,
+        onToggleTranslate: _toggleAutoTranslate,
         onCall: () => CallLauncher.startCall(
           context,
           peerDeviceId: widget.peerDeviceId,
@@ -183,7 +260,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       itemBuilder: (ctx, i) {
         final m = _messages[i];
         final mine = m.senderId == _myId;
-        return _MessageBubble(message: m, mine: mine);
+        return _MessageBubble(
+          message: m,
+          mine: mine,
+          displayBody: _displayBodyFor(m),
+          translating: _translatingIds.contains(m.id),
+        );
       },
     );
   }
@@ -193,10 +275,14 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
   const _ThreadHeader({
     required this.title,
     required this.peer,
+    required this.autoTranslate,
+    required this.onToggleTranslate,
     required this.onCall,
   });
   final String title;
   final RemoteProfile? peer;
+  final bool autoTranslate;
+  final VoidCallback onToggleTranslate;
   final VoidCallback onCall;
 
   @override
@@ -226,6 +312,12 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Center(
+            child: _TranslatePill(active: autoTranslate, onTap: onToggleTranslate),
+          ),
+        ),
         IconButton(
           tooltip: 'Appel vidéo',
           onPressed: onCall,
@@ -236,10 +328,80 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
+/// Dark pill with a glowing orb on one side — taps toggle the auto-translate
+/// state. Mimics a physical switch where the "on" position lights up.
+class _TranslatePill extends StatelessWidget {
+  const _TranslatePill({required this.active, required this.onTap});
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const w = 44.0;
+    const h = 22.0;
+    const ball = 18.0;
+    final orbColor = active ? const Color(0xFFFF6A00) : WhatsAppCallTheme.subtleText;
+    return Tooltip(
+      message: active ? 'Traduction auto activée' : 'Traduire les messages',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: w,
+          height: h,
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2A3942),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: active ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: ball,
+              height: ball,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: active
+                    ? const RadialGradient(
+                        colors: [Color(0xFFFFC15A), Color(0xFFFF6A00)],
+                      )
+                    : null,
+                color: active ? null : Colors.white.withValues(alpha: 0.35),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: orbColor.withValues(alpha: 0.55),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.mine});
+  const _MessageBubble({
+    required this.message,
+    required this.mine,
+    required this.displayBody,
+    required this.translating,
+  });
   final ChatMessage message;
   final bool mine;
+  /// Body text actually rendered — may be the translated version when the
+  /// thread-level auto-translate toggle is on.
+  final String displayBody;
+  /// Show a subtle indicator while the translation is being fetched.
+  final bool translating;
 
   @override
   Widget build(BuildContext context) {
@@ -288,11 +450,14 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ),
             Text(
-              message.body,
-              style: const TextStyle(
-                color: WhatsAppCallTheme.strongText,
+              displayBody,
+              style: TextStyle(
+                color: translating
+                    ? WhatsAppCallTheme.strongText.withValues(alpha: 0.55)
+                    : WhatsAppCallTheme.strongText,
                 fontSize: 15,
                 height: 1.3,
+                fontStyle: translating ? FontStyle.italic : FontStyle.normal,
               ),
             ),
             const SizedBox(height: 2),
