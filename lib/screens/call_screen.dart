@@ -314,8 +314,8 @@ class _CallScreenState extends State<CallScreen> {
       return Scaffold(
         backgroundColor: WhatsAppCallTheme.scaffold,
         appBar: AppBar(
-          backgroundColor: WhatsAppCallTheme.waHeader,
-          foregroundColor: Colors.white,
+          backgroundColor: WhatsAppCallTheme.scaffold,
+          foregroundColor: WhatsAppCallTheme.strongText,
           title: const Text('Could not join'),
           leading: IconButton(
             icon: const Icon(Icons.close),

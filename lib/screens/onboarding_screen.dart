@@ -106,8 +106,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         backgroundColor: WhatsAppCallTheme.scaffold,
         appBar: AppBar(
           title: Text(AppStrings.t('onb_profile_title')),
-          backgroundColor: WhatsAppCallTheme.waHeader,
-          foregroundColor: Colors.white,
+          backgroundColor: WhatsAppCallTheme.scaffold,
+          foregroundColor: WhatsAppCallTheme.strongText,
         ),
         body: SafeArea(
           child: SingleChildScrollView(
@@ -206,7 +206,7 @@ class _OnboardingHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: WhatsAppCallTheme.waHeader,
+      color: WhatsAppCallTheme.scaffold,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         child: Column(

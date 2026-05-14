@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_strings.dart';
@@ -9,8 +11,10 @@ import 'join_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 
-/// Bottom-nav host for the app. The existing join flow lives at the centered
-/// "Appel" tab; the three placeholder tabs are scaffolded for later screens.
+/// Floating glass-morphism bottom-nav. The pill sits above the page content
+/// thanks to a Stack + BackdropFilter; each page is responsible for adding
+/// its own bottom padding when needed so scrollable content doesn't end up
+/// hidden under the bar.
 class RootShell extends StatefulWidget {
   const RootShell({super.key, required this.translation});
 
@@ -31,64 +35,178 @@ class _RootShellState extends State<RootShell> {
     const ProfileScreen(),
   ];
 
-  List<NavigationDestination> _destinationsFor(int unread) =>
-      <NavigationDestination>[
-        NavigationDestination(
-          icon: const Icon(Icons.search),
-          selectedIcon: const Icon(Icons.manage_search),
-          label: AppStrings.t('nav_search'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.call_outlined),
-          selectedIcon: const Icon(Icons.call),
-          label: AppStrings.t('nav_call'),
-        ),
-        NavigationDestination(
-          icon: _badged(const Icon(Icons.chat_bubble_outline), unread),
-          selectedIcon: _badged(const Icon(Icons.chat_bubble), unread),
-          label: AppStrings.t('nav_chat'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.person_outline),
-          selectedIcon: const Icon(Icons.person),
-          label: AppStrings.t('nav_tab3'),
-        ),
-      ];
-
-  Widget _badged(Widget icon, int count) {
-    if (count <= 0) return icon;
-    return Badge.count(
-      count: count,
-      backgroundColor: WhatsAppCallTheme.danger,
-      textColor: Colors.white,
-      child: icon,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: ChatUnread.count,
-      builder: (context, unread, _) {
-        return Scaffold(
-          backgroundColor: WhatsAppCallTheme.scaffold,
-          body: IndexedStack(index: _index, children: _pages),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _index,
-            backgroundColor: WhatsAppCallTheme.bar,
-            indicatorColor: WhatsAppCallTheme.accentMuted,
-            onDestinationSelected: (i) {
-              setState(() => _index = i);
-              if (i == 2) {
-                // Opening Chat tab clears the badge.
-                ChatUnread.markAllSeen();
-              }
-            },
-            destinations: _destinationsFor(unread),
-          ),
-        );
-      },
+    return Scaffold(
+      backgroundColor: WhatsAppCallTheme.scaffold,
+      extendBody: true,
+      body: ValueListenableBuilder<int>(
+        valueListenable: ChatUnread.count,
+        builder: (context, unread, _) {
+          return Stack(
+            children: [
+              IndexedStack(index: _index, children: _pages),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 12 + MediaQuery.paddingOf(context).bottom,
+                child: _GlassNavBar(
+                  selected: _index,
+                  unreadChat: unread,
+                  onSelect: (i) {
+                    setState(() => _index = i);
+                    if (i == 2) ChatUnread.markAllSeen();
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
+class _GlassNavBar extends StatelessWidget {
+  const _GlassNavBar({
+    required this.selected,
+    required this.unreadChat,
+    required this.onSelect,
+  });
+
+  final int selected;
+  final int unreadChat;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <_NavItemData>[
+      _NavItemData(
+        icon: Icons.search,
+        selectedIcon: Icons.manage_search,
+        label: AppStrings.t('nav_search'),
+      ),
+      _NavItemData(
+        icon: Icons.call_outlined,
+        selectedIcon: Icons.call,
+        label: AppStrings.t('nav_call'),
+      ),
+      _NavItemData(
+        icon: Icons.chat_bubble_outline,
+        selectedIcon: Icons.chat_bubble,
+        label: AppStrings.t('nav_chat'),
+        badge: unreadChat,
+      ),
+      _NavItemData(
+        icon: Icons.person_outline,
+        selectedIcon: Icons.person,
+        label: AppStrings.t('nav_tab3'),
+      ),
+    ];
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.30),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Expanded(
+                  child: _NavItem(
+                    data: items[i],
+                    selected: selected == i,
+                    onTap: () => onSelect(i),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItemData {
+  const _NavItemData({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    this.badge = 0,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final int badge;
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.data,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _NavItemData data;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.22)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          alignment: Alignment.center,
+          child: _badged(
+            Icon(
+              selected ? data.selectedIcon : data.icon,
+              size: 22,
+              color: Colors.white,
+            ),
+            data.badge,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _badged(Widget child, int count) {
+    if (count <= 0) return child;
+    return Badge.count(
+      count: count,
+      backgroundColor: WhatsAppCallTheme.danger,
+      textColor: Colors.white,
+      child: child,
+    );
+  }
+}

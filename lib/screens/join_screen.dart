@@ -505,7 +505,7 @@ class _WhatsAppCallHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: WhatsAppCallTheme.waHeader,
+      color: WhatsAppCallTheme.scaffold,
       child: SafeArea(
         bottom: false,
         child: Padding(

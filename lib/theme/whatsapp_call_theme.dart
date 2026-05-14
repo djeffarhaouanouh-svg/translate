@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 /// WhatsApp-inspired palette (dark chat surfaces + green accents).
 abstract final class WhatsAppCallTheme {
-  static const Color scaffold = Color(0xFF0B141A);
-  static const Color surface = Color(0xFF111B21);
-  static const Color bar = Color(0xFF1F2C34);
+  static const Color scaffold = Color(0xFF0A0A0A);
+  static const Color surface = Color(0xFF141414);
+  static const Color bar = Color(0xFF1C1C1C);
   static const Color waHeader = Color(0xFF008069);
   static const Color accent = Color(0xFF00A884);
   static const Color accentMuted = Color(0xFF128C7E);
@@ -12,7 +12,7 @@ abstract final class WhatsAppCallTheme {
   static const Color danger = Color(0xFFE53935);
   static const Color subtleText = Color(0xFF8696A0);
   static const Color strongText = Color(0xFFE9EDEF);
-  static const Color bubbleIncoming = Color(0xFF202C33);
+  static const Color bubbleIncoming = Color(0xFF1F1F1F);
 
   static ThemeData material() {
     const base = ColorScheme.dark(
@@ -29,12 +29,14 @@ abstract final class WhatsAppCallTheme {
       colorScheme: base,
       scaffoldBackgroundColor: scaffold,
       appBarTheme: const AppBarTheme(
-        backgroundColor: waHeader,
+        backgroundColor: scaffold,
         foregroundColor: Colors.white,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         titleTextStyle: TextStyle(
-          color: Colors.white,
+          color: strongText,
           fontSize: 20,
           fontWeight: FontWeight.w500,
         ),
