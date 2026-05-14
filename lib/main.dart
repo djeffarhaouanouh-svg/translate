@@ -75,12 +75,11 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
     if (authed) {
       await _hydrateAuthedSession();
     }
-    final onboardingDone =
-        authed ? await UserPrefs.isOnboardingDone() : true;
+    final needsOnboarding = authed ? await _resolveNeedsOnboarding() : false;
     if (!mounted) return;
     setState(() {
       _authed = authed;
-      _needsOnboarding = authed && !onboardingDone;
+      _needsOnboarding = needsOnboarding;
       _loading = false;
     });
   }
@@ -89,15 +88,28 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   Future<void> _onSignedIn() async {
     setState(() => _loading = true);
     await _hydrateAuthedSession();
-    final done = await UserPrefs.isOnboardingDone();
-    final profile = await UserPrefs.loadProfile();
-    final hasProfile = profile != null && profile.firstName.trim().isNotEmpty;
+    final needsOnboarding = await _resolveNeedsOnboarding();
     if (!mounted) return;
     setState(() {
       _authed = true;
-      _needsOnboarding = !done || !hasProfile;
+      _needsOnboarding = needsOnboarding;
       _loading = false;
     });
+  }
+
+  /// Authoritative source: Supabase `profiles` row. The local flag in
+  /// SharedPreferences can be stale (e.g. user signed in with a brand-new
+  /// account on a device that already completed onboarding under a previous
+  /// account), so we always defer to the server. Falls back to the local
+  /// flag only when Supabase is unreachable.
+  Future<bool> _resolveNeedsOnboarding() async {
+    if (!isSupabaseReady) {
+      return !(await UserPrefs.isOnboardingDone());
+    }
+    final uid = AuthService.currentUserId;
+    if (uid.isEmpty) return true;
+    final remote = await ProfileApi.fetchById(uid);
+    return remote == null || remote.displayName.trim().isEmpty;
   }
 
   void _onSignedOut() {
