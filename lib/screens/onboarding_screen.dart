@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/app_strings.dart';
+import '../services/auth_service.dart';
 import '../services/device_id.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
@@ -87,14 +88,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
     // Make the rest of the app speak the user's chosen language right away.
     AppStrings.setFromCode(_selectedLang!);
-    // Mirror to Supabase so other users can discover this profile in search.
-    // Best-effort: failure here does not block onboarding.
-    final deviceId = await DeviceId.getOrCreate();
-    await ProfileApi.upsertMyProfile(
-      deviceId: deviceId,
-      displayName: name,
-      language: _selectedLang!,
-    );
+    // Only push to Supabase if we already have an auth user — otherwise
+    // the FK `profiles.id REFERENCES auth.users(id)` would fail. The
+    // initial onboarding runs pre-login by design; the upsert happens
+    // post-signin from `main.dart::_hydrateAuthedSession`.
+    if (AuthService.isAuthenticated) {
+      final deviceId = await DeviceId.getOrCreate();
+      await ProfileApi.upsertMyProfile(
+        deviceId: deviceId,
+        displayName: name,
+        language: _selectedLang!,
+      );
+    }
     if (!mounted) return;
     widget.onCompleted();
   }

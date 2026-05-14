@@ -64,22 +64,23 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   }
 
   Future<void> _bootstrap() async {
-    // Restore the UI language from the saved profile so the app boots in the
-    // user's language instead of the default fallback. Independent of auth
-    // state — we still want the login screen in the right language.
+    // Onboarding (name + language) is now stored locally and runs BEFORE
+    // login, so the login screen itself is rendered in the user's chosen
+    // language. Restore the UI language from local prefs as early as possible.
     final profile = await UserPrefs.loadProfile();
     if (profile != null && profile.sourceLang.isNotEmpty) {
       AppStrings.setFromCode(profile.sourceLang);
     }
+    final hasLocalOnboarding =
+        profile != null && profile.firstName.trim().isNotEmpty;
     final authed = AuthService.isAuthenticated;
     if (authed) {
       await _hydrateAuthedSession();
     }
-    final needsOnboarding = authed ? await _resolveNeedsOnboarding() : false;
     if (!mounted) return;
     setState(() {
       _authed = authed;
-      _needsOnboarding = needsOnboarding;
+      _needsOnboarding = !hasLocalOnboarding;
       _loading = false;
     });
   }
@@ -88,28 +89,14 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   Future<void> _onSignedIn() async {
     setState(() => _loading = true);
     await _hydrateAuthedSession();
-    final needsOnboarding = await _resolveNeedsOnboarding();
     if (!mounted) return;
+    // Onboarding already happened pre-login by design, so we never bounce
+    // back to it here. The Supabase profile row was either created by the
+    // hydrate step above, or by the upsert call there if missing.
     setState(() {
       _authed = true;
-      _needsOnboarding = needsOnboarding;
       _loading = false;
     });
-  }
-
-  /// Authoritative source: Supabase `profiles` row. The local flag in
-  /// SharedPreferences can be stale (e.g. user signed in with a brand-new
-  /// account on a device that already completed onboarding under a previous
-  /// account), so we always defer to the server. Falls back to the local
-  /// flag only when Supabase is unreachable.
-  Future<bool> _resolveNeedsOnboarding() async {
-    if (!isSupabaseReady) {
-      return !(await UserPrefs.isOnboardingDone());
-    }
-    final uid = AuthService.currentUserId;
-    if (uid.isEmpty) return true;
-    final remote = await ProfileApi.fetchById(uid);
-    return remote == null || remote.displayName.trim().isEmpty;
   }
 
   void _onSignedOut() {
@@ -119,18 +106,24 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
     });
   }
 
-  /// Side-effects that depend on having a current auth user: mirror profile
-  /// row, start unread-count listener. Best-effort.
+  /// Side-effects that depend on having a current auth user: mirror the
+  /// locally-stored onboarding data (display name + spoken language) up to
+  /// the Supabase `profiles` row, then start the unread-count listener.
+  /// This is what materializes the profile right after signup — the user
+  /// chose their name and language pre-login, we push them now that we
+  /// have an auth.uid() to anchor on.
   Future<void> _hydrateAuthedSession() async {
     final uid = AuthService.currentUserId;
     if (uid.isEmpty) return;
     final profile = await UserPrefs.loadProfile();
     if (profile != null && profile.firstName.isNotEmpty) {
-      unawaited(ProfileApi.upsertMyProfile(
+      // Await this one — the user may navigate straight to the profile tab
+      // and we don't want a flash of "no row".
+      await ProfileApi.upsertMyProfile(
         deviceId: uid,
         displayName: profile.firstName,
         language: profile.sourceLang,
-      ));
+      );
     }
     unawaited(ChatUnread.start(uid));
   }
@@ -159,13 +152,15 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
         ),
       );
     }
-    if (!_authed) {
-      return const LoginScreen();
-    }
+    // Order matters: language must be picked before the login screen so the
+    // copy on Login/Signup renders in the user's chosen language.
     if (_needsOnboarding) {
       return OnboardingScreen(
         onCompleted: () => setState(() => _needsOnboarding = false),
       );
+    }
+    if (!_authed) {
+      return const LoginScreen();
     }
     return RootShell(translation: _translation);
   }
