@@ -2,14 +2,25 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Per-install identifier used as the chat `sender_id` until proper auth is
-/// wired in. Stable for the life of the app install — wiping local storage
-/// (or reinstalling) yields a new id.
+import 'auth_service.dart';
+
+/// User identifier used as the chat `sender_id`, friendship key, etc.
+///
+/// Now that Supabase Auth is the source of identity, this resolves to
+/// `auth.currentUser.id` whenever the user is signed in — which is the case
+/// everywhere inside [RootShell] (the app gates login at boot). The legacy
+/// per-install UUID is kept only as a fallback for dev builds without
+/// Supabase configured, so the call-sites scattered across the codebase
+/// don't need to know the difference.
 abstract final class DeviceId {
   static const _key = 'device_id';
   static String? _cached;
 
   static Future<String> getOrCreate() async {
+    // Prefer the authenticated user id — that's the real identity now.
+    if (AuthService.isAuthenticated) {
+      return AuthService.currentUserId;
+    }
     final cached = _cached;
     if (cached != null) return cached;
     final p = await SharedPreferences.getInstance();
