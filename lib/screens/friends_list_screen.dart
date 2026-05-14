@@ -6,6 +6,7 @@ import '../services/friendship_api.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../theme/whatsapp_call_theme.dart';
+import '../widgets/profile_avatar.dart';
 
 /// List of accounts behind the Followers / Following counts on ProfileScreen.
 /// Each row shows the peer's avatar + name + language. When viewing
@@ -181,7 +182,6 @@ class _FriendRow extends StatelessWidget {
     final name = profile.displayName.isNotEmpty
         ? profile.displayName
         : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
-    final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -194,22 +194,11 @@ class _FriendRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: WhatsAppCallTheme.accentMuted,
-              ),
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                ),
-              ),
+            ProfileAvatar(
+              displayName: name,
+              avatarUrl: profile.avatarUrl,
+              avatarColorHex: profile.avatarColor,
+              size: 44,
             ),
             const SizedBox(width: 12),
             Expanded(

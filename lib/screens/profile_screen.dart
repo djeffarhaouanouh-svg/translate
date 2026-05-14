@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../services/app_strings.dart';
 import '../services/device_id.dart';
@@ -8,6 +9,7 @@ import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
+import '../widgets/profile_avatar.dart';
 import 'friends_list_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -77,6 +79,40 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     await _reload();
   }
 
+  Future<void> _pickAndUploadAvatar() async {
+    if (_deviceId.isEmpty) return;
+    if (!isSupabaseReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Supabase non configuré.')),
+      );
+      return;
+    }
+    final picker = ImagePicker();
+    final XFile? file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final ext = file.name.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+    final url = await ProfileApi.uploadAvatar(
+      deviceId: _deviceId,
+      bytes: bytes,
+      contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
+    );
+    if (!mounted) return;
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Échec de l\'upload de la photo.')),
+      );
+      return;
+    }
+    await _reload();
+  }
+
   Future<void> _openEditor() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -105,36 +141,6 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final h = _remote?.handle.trim() ?? '';
     if (h.isNotEmpty) return '@$h';
     return '@${_deviceId.replaceAll('-', '').substring(0, 8)}';
-  }
-
-  Color get _avatarColor {
-    final hex = _remote?.avatarColor ?? '';
-    final parsed = _parseHexColor(hex);
-    if (parsed != null) return parsed;
-    return _fallbackAvatarColor(_displayName.isEmpty ? _deviceId : _displayName);
-  }
-
-  static Color? _parseHexColor(String hex) {
-    var v = hex.trim();
-    if (v.isEmpty) return null;
-    if (v.startsWith('#')) v = v.substring(1);
-    if (v.length == 6) v = 'FF$v';
-    if (v.length != 8) return null;
-    final n = int.tryParse(v, radix: 16);
-    return n == null ? null : Color(n);
-  }
-
-  static Color _fallbackAvatarColor(String seed) {
-    const palette = <int>[
-      0xFF00A884, 0xFF128C7E, 0xFF34B7F1, 0xFF1F6FEB, 0xFF7B61FF,
-      0xFFA855F7, 0xFFEC4899, 0xFFF97316, 0xFFEAB308, 0xFF22C55E,
-    ];
-    if (seed.isEmpty) return Color(palette[0]);
-    var hash = 0;
-    for (final c in seed.codeUnits) {
-      hash = (hash * 31 + c) & 0x7fffffff;
-    }
-    return Color(palette[hash % palette.length]);
   }
 
   @override
@@ -176,7 +182,9 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                         ? AppStrings.t('profile_anonymous')
                         : _displayName,
                     handle: _handle,
-                    avatarColor: _avatarColor,
+                    avatarColorHex: _remote?.avatarColor,
+                    avatarUrl: _remote?.avatarUrl,
+                    onTapAvatar: _pickAndUploadAvatar,
                   ),
                   const SizedBox(height: 24),
                   _StatsRow(
@@ -209,36 +217,45 @@ class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.displayName,
     required this.handle,
-    required this.avatarColor,
+    required this.avatarColorHex,
+    required this.avatarUrl,
+    required this.onTapAvatar,
   });
 
   final String displayName;
   final String handle;
-  final Color avatarColor;
+  final String? avatarColorHex;
+  final String? avatarUrl;
+  final VoidCallback onTapAvatar;
 
   @override
   Widget build(BuildContext context) {
-    final initial =
-        displayName.isNotEmpty ? displayName.characters.first.toUpperCase() : '?';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          width: 84,
-          height: 84,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: avatarColor,
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            initial,
-            style: const TextStyle(
-              color: Colors.white,
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            ProfileAvatar(
+              displayName: displayName,
+              avatarUrl: avatarUrl,
+              avatarColorHex: avatarColorHex,
+              size: 84,
               fontSize: 36,
-              fontWeight: FontWeight.w600,
+              onTap: onTapAvatar,
             ),
-          ),
+            Container(
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: WhatsAppCallTheme.accent,
+                shape: BoxShape.circle,
+                border: Border.all(color: WhatsAppCallTheme.scaffold, width: 2),
+              ),
+              child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+            ),
+          ],
         ),
         const SizedBox(width: 18),
         Expanded(

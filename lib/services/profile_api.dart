@@ -10,6 +10,7 @@ class RemoteProfile {
     required this.displayName,
     required this.language,
     required this.avatarColor,
+    required this.avatarUrl,
   });
 
   final String id;
@@ -17,6 +18,7 @@ class RemoteProfile {
   final String displayName;
   final String language;
   final String avatarColor;
+  final String avatarUrl;
 
   /// Backwards-compat shim — the rest of the UI still reads `firstName` /
   /// `sourceLang`. Same data, different schema names.
@@ -29,6 +31,7 @@ class RemoteProfile {
         displayName: m['display_name']?.toString() ?? '',
         language: m['language']?.toString() ?? '',
         avatarColor: m['avatar_color']?.toString() ?? '',
+        avatarUrl: m['avatar_url']?.toString() ?? '',
       );
 }
 
@@ -126,6 +129,43 @@ abstract final class ProfileApi {
         error: e.toString(),
       );
       debugPrint('ProfileApi.upsertMyProfile failed: $e');
+    }
+  }
+
+  /// Upload [bytes] as the user's avatar to Supabase Storage and write the
+  /// resulting public URL back into `profiles.avatar_url`. Returns the URL
+  /// (with a cache-busting query param) on success, null on failure.
+  static Future<String?> uploadAvatar({
+    required String deviceId,
+    required Uint8List bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    if (!isSupabaseReady) return null;
+    if (deviceId.isEmpty || bytes.isEmpty) return null;
+    try {
+      final ext = contentType.endsWith('png') ? 'png' : 'jpg';
+      final path = '$deviceId.$ext';
+      await _c.storage.from('avatars').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: true,
+              contentType: contentType,
+              cacheControl: '3600',
+            ),
+          );
+      final baseUrl = _c.storage.from('avatars').getPublicUrl(path);
+      // Cache-bust so the new image is fetched after re-upload.
+      final urlWithBuster =
+          '$baseUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+      await _c.from('profiles').update({
+        'avatar_url': urlWithBuster,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', deviceId);
+      return urlWithBuster;
+    } catch (e) {
+      debugPrint('ProfileApi.uploadAvatar failed: $e');
+      return null;
     }
   }
 

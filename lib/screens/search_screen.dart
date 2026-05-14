@@ -8,6 +8,7 @@ import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
+import '../widgets/profile_avatar.dart';
 
 /// Onglet 1 — find friends by their first name. Each result row shows their
 /// language flag and a contextual action button based on the existing
@@ -381,30 +382,17 @@ class _IncomingRequestTile extends StatelessWidget {
     final name = p?.displayName.isNotEmpty == true
         ? p!.displayName
         : (p?.handle.isNotEmpty == true ? '@${p!.handle}' : 'Inconnu');
-    final initial =
-        name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
     final lang = p != null ? findLanguageByCode(p.language) : null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: WhatsAppCallTheme.accentMuted,
-            ),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-              ),
-            ),
+          ProfileAvatar(
+            displayName: name,
+            avatarUrl: p?.avatarUrl,
+            avatarColorHex: p?.avatarColor,
+            size: 40,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -479,10 +467,6 @@ class _ProfileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = findLanguageByCode(profile.sourceLang);
-    final initial = profile.firstName.isNotEmpty
-        ? profile.firstName.characters.first.toUpperCase()
-        : '?';
-
     final name = profile.firstName.isNotEmpty
         ? profile.firstName
         : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
@@ -498,22 +482,11 @@ class _ProfileRow extends StatelessWidget {
         child: Row(
           children: [
             // 1. Avatar — fixed 44x44
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: WhatsAppCallTheme.accentMuted,
-              ),
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                ),
-              ),
+            ProfileAvatar(
+              displayName: profile.displayName,
+              avatarUrl: profile.avatarUrl,
+              avatarColorHex: profile.avatarColor,
+              size: 44,
             ),
             const SizedBox(width: 12),
             // 2. Name + language — takes remaining space

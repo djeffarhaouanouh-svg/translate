@@ -8,6 +8,7 @@ import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
+import '../widgets/profile_avatar.dart';
 import 'chat_thread_screen.dart';
 
 /// WhatsApp-style chat home: lists every accepted friend (union of followers
@@ -246,7 +247,6 @@ class _FriendChatRow extends StatelessWidget {
     final name = profile.displayName.isNotEmpty
         ? profile.displayName
         : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
-    final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
 
     final subtitleParts = <InlineSpan>[];
     if (lastMessage != null && lastMessage!.body.isNotEmpty) {
@@ -272,22 +272,11 @@ class _FriendChatRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: WhatsAppCallTheme.accentMuted,
-              ),
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                ),
-              ),
+            ProfileAvatar(
+              displayName: profile.displayName,
+              avatarUrl: profile.avatarUrl,
+              avatarColorHex: profile.avatarColor,
+              size: 48,
             ),
             const SizedBox(width: 12),
             Expanded(

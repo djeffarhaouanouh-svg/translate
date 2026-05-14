@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
+import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
+import '../widgets/profile_avatar.dart';
 
 /// One-to-one chat thread for [conversationId]. Title is the human-friendly
 /// name shown in the header. The header phone icon dials the peer directly
@@ -45,6 +47,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   String _myId = '';
   String _myName = '';
   String _myLang = '';
+  RemoteProfile? _peer;
   bool _sending = false;
   String? _error;
 
@@ -57,11 +60,15 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   Future<void> _bootstrap() async {
     final id = await DeviceId.getOrCreate();
     final profile = await UserPrefs.loadProfile();
+    final peer = isSupabaseReady
+        ? await ProfileApi.fetchById(widget.peerDeviceId)
+        : null;
     if (!mounted) return;
     setState(() {
       _myId = id;
       _myName = profile?.firstName.trim() ?? '';
       _myLang = profile?.sourceLang.trim() ?? '';
+      _peer = peer;
     });
 
     if (!isSupabaseReady) {
@@ -130,6 +137,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       backgroundColor: WhatsAppCallTheme.scaffold,
       appBar: _ThreadHeader(
         title: widget.title,
+        peer: _peer,
         onCall: () => CallLauncher.startCall(
           context,
           peerDeviceId: widget.peerDeviceId,
@@ -182,8 +190,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 }
 
 class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
-  const _ThreadHeader({required this.title, required this.onCall});
+  const _ThreadHeader({
+    required this.title,
+    required this.peer,
+    required this.onCall,
+  });
   final String title;
+  final RemoteProfile? peer;
   final VoidCallback onCall;
 
   @override
@@ -195,10 +208,11 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 0,
       title: Row(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: Colors.white.withValues(alpha: 0.18),
-            child: const Icon(Icons.person, color: Colors.white, size: 20),
+          ProfileAvatar(
+            displayName: title,
+            avatarUrl: peer?.avatarUrl,
+            avatarColorHex: peer?.avatarColor,
+            size: 36,
           ),
           const SizedBox(width: 10),
           Expanded(
