@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
@@ -154,14 +153,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _reload();
   }
 
-  Future<void> _startCallWith(RemoteProfile peer) async {
-    await CallLauncher.startCall(
-      context,
-      peerDeviceId: peer.id,
-      translation: widget.translation,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -208,7 +199,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             lastMessage: last,
             isMine: last?.senderId == _myId,
             onTap: () => _openThread(p),
-            onCall: () => _startCallWith(p),
           );
         },
       ),
@@ -222,13 +212,11 @@ class _FriendChatRow extends StatelessWidget {
     required this.lastMessage,
     required this.isMine,
     required this.onTap,
-    required this.onCall,
   });
   final RemoteProfile profile;
   final ChatMessage? lastMessage;
   final bool isMine;
   final VoidCallback onTap;
-  final VoidCallback onCall;
 
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
@@ -349,26 +337,6 @@ class _FriendChatRow extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Tap-to-call shortcut — sits at the trailing edge so the rest
-            // of the row remains an "open thread" target.
-            Material(
-              color: WhatsAppCallTheme.accent,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onCall,
-                child: const SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Icon(
-                    Icons.videocam_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
               ),
             ),
           ],
