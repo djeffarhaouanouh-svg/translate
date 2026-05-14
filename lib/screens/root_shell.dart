@@ -143,10 +143,10 @@ class _GlassNavBar extends StatelessWidget {
                     width: _itemWidth - 4,
                     height: _height - 16,
                     decoration: BoxDecoration(
-                      color: WhatsAppCallTheme.accent.withValues(alpha: 0.22),
+                      color: Colors.white.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: WhatsAppCallTheme.accent.withValues(alpha: 0.5),
+                        color: Colors.white.withValues(alpha: 0.28),
                       ),
                     ),
                   ),
