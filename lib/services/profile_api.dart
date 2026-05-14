@@ -133,40 +133,38 @@ abstract final class ProfileApi {
   }
 
   /// Upload [bytes] as the user's avatar to Supabase Storage and write the
-  /// resulting public URL back into `profiles.avatar_url`. Returns the URL
-  /// (with a cache-busting query param) on success, null on failure.
-  static Future<String?> uploadAvatar({
+  /// resulting public URL back into `profiles.avatar_url`. Throws on failure
+  /// so the caller can surface the real error (bucket missing, RLS, etc.).
+  static Future<String> uploadAvatar({
     required String deviceId,
     required Uint8List bytes,
     String contentType = 'image/jpeg',
   }) async {
-    if (!isSupabaseReady) return null;
-    if (deviceId.isEmpty || bytes.isEmpty) return null;
-    try {
-      final ext = contentType.endsWith('png') ? 'png' : 'jpg';
-      final path = '$deviceId.$ext';
-      await _c.storage.from('avatars').uploadBinary(
-            path,
-            bytes,
-            fileOptions: FileOptions(
-              upsert: true,
-              contentType: contentType,
-              cacheControl: '3600',
-            ),
-          );
-      final baseUrl = _c.storage.from('avatars').getPublicUrl(path);
-      // Cache-bust so the new image is fetched after re-upload.
-      final urlWithBuster =
-          '$baseUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-      await _c.from('profiles').update({
-        'avatar_url': urlWithBuster,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', deviceId);
-      return urlWithBuster;
-    } catch (e) {
-      debugPrint('ProfileApi.uploadAvatar failed: $e');
-      return null;
+    if (!isSupabaseReady) {
+      throw StateError('Supabase non configuré');
     }
+    if (deviceId.isEmpty) throw ArgumentError('deviceId vide');
+    if (bytes.isEmpty) throw ArgumentError('image vide');
+
+    final ext = contentType.endsWith('png') ? 'png' : 'jpg';
+    final path = '$deviceId.$ext';
+    await _c.storage.from('avatars').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentType,
+            cacheControl: '3600',
+          ),
+        );
+    final baseUrl = _c.storage.from('avatars').getPublicUrl(path);
+    final urlWithBuster =
+        '$baseUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+    await _c.from('profiles').update({
+      'avatar_url': urlWithBuster,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', deviceId);
+    return urlWithBuster;
   }
 
   /// Case-insensitive substring search by display name. Excludes my own profile.

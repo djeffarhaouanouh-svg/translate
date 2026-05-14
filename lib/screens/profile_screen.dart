@@ -98,19 +98,23 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final bytes = await file.readAsBytes();
     if (!mounted) return;
     final ext = file.name.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
-    final url = await ProfileApi.uploadAvatar(
-      deviceId: _deviceId,
-      bytes: bytes,
-      contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
-    );
-    if (!mounted) return;
-    if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Échec de l\'upload de la photo.')),
+    try {
+      await ProfileApi.uploadAvatar(
+        deviceId: _deviceId,
+        bytes: bytes,
+        contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
       );
-      return;
+      if (!mounted) return;
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload échoué : $e'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
     }
-    await _reload();
   }
 
   Future<void> _openEditor() async {
