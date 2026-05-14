@@ -6,6 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../services/app_strings.dart';
+import '../services/auth_service.dart';
+import '../services/profile_api.dart';
+import '../services/usage_tracker.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../translation/translation_route.dart';
@@ -115,6 +119,39 @@ class _CallScreenState extends State<CallScreen> {
   void initState() {
     super.initState();
     _start();
+    unawaited(_initUsageTracking());
+    UsageTracker.creditsExhausted.addListener(_onCreditsExhausted);
+  }
+
+  /// Pull the user's current credit balance and start the call timer. The
+  /// call itself runs regardless — we just decide whether translation is
+  /// allowed on top.
+  Future<void> _initUsageTracking() async {
+    final uid = AuthService.currentUserId;
+    if (uid.isEmpty) return;
+    final p = await ProfileApi.fetchById(uid);
+    if (!mounted || p == null) return;
+    UsageTracker.start(userId: uid, initialCredits: p.creditsSeconds);
+    if (p.creditsSeconds <= 0) {
+      // Already empty before the call started — kill translation now.
+      await widget.translation.detach();
+    }
+  }
+
+  /// Triggered when credits hit 0 mid-call. We detach the translation
+  /// pipeline so the OpenAI session stops billing, but leave the LiveKit
+  /// connection alone so people can keep talking (untranslated).
+  void _onCreditsExhausted() {
+    if (!UsageTracker.creditsExhausted.value) return;
+    unawaited(widget.translation.detach());
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.t('credits_exhausted_banner')),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   Future<void> _start() async {
@@ -292,6 +329,10 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
+    UsageTracker.creditsExhausted.removeListener(_onCreditsExhausted);
+    // Flush whatever seconds were used since the last tick before tearing
+    // everything down. Fire-and-forget — disposing a State must be sync.
+    unawaited(UsageTracker.stop());
     final ev = _roomEvents;
     _roomEvents = null;
     if (ev != null) unawaited(ev.dispose());
