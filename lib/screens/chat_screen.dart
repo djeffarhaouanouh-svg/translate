@@ -151,17 +151,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
-      appBar: AppBar(
-        title: const Text('Chat'),
-        actions: [
-          IconButton(
-            tooltip: 'Rafraîchir',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: _buildBody(),
+      body: SafeArea(bottom: false, child: _buildBody()),
     );
   }
 

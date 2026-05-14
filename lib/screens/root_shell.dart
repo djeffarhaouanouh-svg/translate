@@ -11,10 +11,8 @@ import 'join_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 
-/// Floating glass-morphism bottom-nav. The pill sits above the page content
-/// thanks to a Stack + BackdropFilter; each page is responsible for adding
-/// its own bottom padding when needed so scrollable content doesn't end up
-/// hidden under the bar.
+/// Floating glass-morphism bottom-nav with a sliding pill that animates
+/// between selected tabs.
 class RootShell extends StatefulWidget {
   const RootShell({super.key, required this.translation});
 
@@ -47,16 +45,18 @@ class _RootShellState extends State<RootShell> {
             children: [
               IndexedStack(index: _index, children: _pages),
               Positioned(
-                left: 20,
-                right: 20,
+                left: 0,
+                right: 0,
                 bottom: 12 + MediaQuery.paddingOf(context).bottom,
-                child: _GlassNavBar(
-                  selected: _index,
-                  unreadChat: unread,
-                  onSelect: (i) {
-                    setState(() => _index = i);
-                    if (i == 2) ChatUnread.markAllSeen();
-                  },
+                child: Center(
+                  child: _GlassNavBar(
+                    selected: _index,
+                    unreadChat: unread,
+                    onSelect: (i) {
+                      setState(() => _index = i);
+                      if (i == 2) ChatUnread.markAllSeen();
+                    },
+                  ),
                 ),
               ),
             ],
@@ -77,6 +77,10 @@ class _GlassNavBar extends StatelessWidget {
   final int selected;
   final int unreadChat;
   final ValueChanged<int> onSelect;
+
+  static const double _height = 54;
+  static const double _itemWidth = 56;
+  static const double _hPad = 6;
 
   @override
   Widget build(BuildContext context) {
@@ -104,13 +108,15 @@ class _GlassNavBar extends StatelessWidget {
       ),
     ];
 
+    final totalWidth = _hPad * 2 + _itemWidth * items.length;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
         child: Container(
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          width: totalWidth,
+          height: _height,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(999),
@@ -125,17 +131,47 @@ class _GlassNavBar extends StatelessWidget {
               ),
             ],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          padding: const EdgeInsets.symmetric(horizontal: _hPad, vertical: 6),
+          child: Stack(
+            alignment: Alignment.centerLeft,
             children: [
-              for (var i = 0; i < items.length; i++)
-                Expanded(
-                  child: _NavItem(
-                    data: items[i],
-                    selected: selected == i,
-                    onTap: () => onSelect(i),
+              // Sliding highlight pill — animates between item slots.
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+                left: _itemWidth * selected,
+                top: 0,
+                bottom: 0,
+                width: _itemWidth,
+                child: Center(
+                  child: Container(
+                    width: _itemWidth - 4,
+                    height: _height - 16,
+                    decoration: BoxDecoration(
+                      color: WhatsAppCallTheme.accent.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: WhatsAppCallTheme.accent.withValues(alpha: 0.5),
+                      ),
+                    ),
                   ),
                 ),
+              ),
+              // Items.
+              Row(
+                children: [
+                  for (var i = 0; i < items.length; i++)
+                    SizedBox(
+                      width: _itemWidth,
+                      height: _height,
+                      child: _NavItem(
+                        data: items[i],
+                        selected: selected == i,
+                        onTap: () => onSelect(i),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -177,21 +213,18 @@ class _NavItem extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          decoration: BoxDecoration(
-            color: selected
-                ? Colors.white.withValues(alpha: 0.22)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          alignment: Alignment.center,
+        child: Center(
           child: _badged(
-            Icon(
-              selected ? data.selectedIcon : data.icon,
-              size: 22,
-              color: Colors.white,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Icon(
+                selected ? data.selectedIcon : data.icon,
+                key: ValueKey(selected),
+                size: 22,
+                color: selected
+                    ? WhatsAppCallTheme.accent
+                    : Colors.white.withValues(alpha: 0.78),
+              ),
             ),
             data.badge,
           ),

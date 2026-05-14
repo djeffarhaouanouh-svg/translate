@@ -142,17 +142,9 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final lang = findLanguageByCode(_languageCode);
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
-      appBar: AppBar(
-        title: Text(AppStrings.t('profile_title')),
-        actions: [
-          IconButton(
-            onPressed: _openEditor,
-            tooltip: AppStrings.t('profile_edit'),
-            icon: const Icon(Icons.edit_outlined),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
         color: WhatsAppCallTheme.accent,
         backgroundColor: WhatsAppCallTheme.bar,
         onRefresh: _reload,
@@ -207,6 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                   ),
                 ],
               ),
+        ),
       ),
     );
   }

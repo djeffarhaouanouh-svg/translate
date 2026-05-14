@@ -150,17 +150,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
-      appBar: AppBar(
-        title: const Text('Rechercher'),
-        actions: [
-          IconButton(
-            tooltip: 'Rafraîchir',
-            onPressed: _refreshFriendships,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: Column(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
         children: [
           _SearchField(controller: _queryCtrl, onChanged: _onQueryChanged),
           if (_error != null)
@@ -179,6 +171,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
             ),
           Expanded(child: _buildBody()),
         ],
+      ),
       ),
     );
   }
