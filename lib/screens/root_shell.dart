@@ -79,8 +79,8 @@ class _GlassNavBar extends StatelessWidget {
   final ValueChanged<int> onSelect;
 
   static const double _height = 54;
-  static const double _itemWidth = 56;
-  static const double _hPad = 6;
+  static const double _itemWidth = 72;
+  static const double _hPad = 10;
 
   @override
   Widget build(BuildContext context) {
