@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
@@ -7,14 +8,19 @@ import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
+import '../translation/realtime_translation_port.dart';
 import 'chat_thread_screen.dart';
 
 /// WhatsApp-style chat home: lists every accepted friend (union of followers
-/// + following). Tapping a row opens the direct-message thread, with a
-/// deterministic conversation id derived from both device ids so the two
-/// sides converge on the same room.
+/// + following). Tapping a row opens the direct-message thread; the trailing
+/// video icon launches a call directly with that friend.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({
+    super.key,
+    this.translation = const NoOpRealtimeTranslation(),
+  });
+
+  final RealtimeTranslationPort translation;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -141,10 +147,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           conversationId: convId,
           title: title,
           peerDeviceId: peer.id,
+          translation: widget.translation,
         ),
       ),
     );
     _reload();
+  }
+
+  Future<void> _startCallWith(RemoteProfile peer) async {
+    await CallLauncher.startCall(
+      context,
+      peerDeviceId: peer.id,
+      translation: widget.translation,
+    );
   }
 
   @override
@@ -193,6 +208,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             lastMessage: last,
             isMine: last?.senderId == _myId,
             onTap: () => _openThread(p),
+            onCall: () => _startCallWith(p),
           );
         },
       ),
@@ -206,11 +222,13 @@ class _FriendChatRow extends StatelessWidget {
     required this.lastMessage,
     required this.isMine,
     required this.onTap,
+    required this.onCall,
   });
   final RemoteProfile profile;
   final ChatMessage? lastMessage;
   final bool isMine;
   final VoidCallback onTap;
+  final VoidCallback onCall;
 
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
@@ -331,6 +349,26 @@ class _FriendChatRow extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Tap-to-call shortcut — sits at the trailing edge so the rest
+            // of the row remains an "open thread" target.
+            Material(
+              color: WhatsAppCallTheme.accent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onCall,
+                child: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(
+                    Icons.videocam_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
               ),
             ),
           ],

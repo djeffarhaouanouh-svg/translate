@@ -7,7 +7,6 @@ import '../services/chat_unread.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import 'chat_screen.dart';
-import 'join_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 
@@ -23,13 +22,13 @@ class RootShell extends StatefulWidget {
 }
 
 class _RootShellState extends State<RootShell> {
+  /// Default tab — Chat now hosts the friends list + call entry point.
   static const _mainIndex = 1;
   int _index = _mainIndex;
 
   late final List<Widget> _pages = <Widget>[
     const SearchScreen(),
-    JoinScreen(translation: widget.translation),
-    const ChatScreen(),
+    ChatScreen(translation: widget.translation),
     const ProfileScreen(),
   ];
 
@@ -54,7 +53,8 @@ class _RootShellState extends State<RootShell> {
                     unreadChat: unread,
                     onSelect: (i) {
                       setState(() => _index = i);
-                      if (i == 2) ChatUnread.markAllSeen();
+                      // Chat is now index 1 (Appel removed).
+                      if (i == 1) ChatUnread.markAllSeen();
                     },
                   ),
                 ),
@@ -89,11 +89,6 @@ class _GlassNavBar extends StatelessWidget {
         icon: Icons.search,
         selectedIcon: Icons.manage_search,
         label: AppStrings.t('nav_search'),
-      ),
-      _NavItemData(
-        icon: Icons.call_outlined,
-        selectedIcon: Icons.call,
-        label: AppStrings.t('nav_call'),
       ),
       _NavItemData(
         icon: Icons.chat_bubble_outline,

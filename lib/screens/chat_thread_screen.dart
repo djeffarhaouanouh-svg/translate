@@ -2,20 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
+import '../translation/realtime_translation_port.dart';
 
 /// One-to-one chat thread for [conversationId]. Title is the human-friendly
-/// name shown in the header (replacing the legacy phone-number look).
+/// name shown in the header. The header phone icon dials the peer directly
+/// via CallLauncher.
 class ChatThreadScreen extends StatefulWidget {
   const ChatThreadScreen({
     super.key,
     required this.conversationId,
     required this.title,
     required this.peerDeviceId,
+    this.translation = const NoOpRealtimeTranslation(),
   });
 
   final String conversationId;
@@ -23,8 +27,10 @@ class ChatThreadScreen extends StatefulWidget {
 
   /// The other party's device id — sent with every message as `recipient`
   /// so the deployed messages schema (DM-style, NOT-NULL recipient column)
-  /// accepts inserts.
+  /// accepts inserts. Also used as the peer for the call shortcut.
   final String peerDeviceId;
+
+  final RealtimeTranslationPort translation;
 
   @override
   State<ChatThreadScreen> createState() => _ChatThreadScreenState();
@@ -122,7 +128,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
-      appBar: _ThreadHeader(title: widget.title),
+      appBar: _ThreadHeader(
+        title: widget.title,
+        onCall: () => CallLauncher.startCall(
+          context,
+          peerDeviceId: widget.peerDeviceId,
+          translation: widget.translation,
+        ),
+      ),
       body: Column(
         children: [
           if (_error != null) _ErrorBanner(message: _error!),
@@ -169,8 +182,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 }
 
 class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
-  const _ThreadHeader({required this.title});
+  const _ThreadHeader({required this.title, required this.onCall});
   final String title;
+  final VoidCallback onCall;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -199,9 +213,9 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         IconButton(
-          tooltip: 'Appel vocal',
-          onPressed: () {},
-          icon: const Icon(Icons.call_outlined),
+          tooltip: 'Appel vidéo',
+          onPressed: onCall,
+          icon: const Icon(Icons.videocam_outlined),
         ),
       ],
     );
