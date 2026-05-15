@@ -62,6 +62,8 @@ abstract final class AppStrings {
     'profile_following': 'Abonnements',
     'profile_speaks': 'Parle {lang}',
     'profile_no_language': 'Aucune langue',
+    'profile_call_language_warning':
+        "Lors de tes appels tu devras parler uniquement {lang} pour que la traduction fonctionne.",
     'profile_edit': 'Modifier',
     'profile_loading': 'Chargement...',
     'profile_anonymous': 'Sans nom',
@@ -161,6 +163,8 @@ abstract final class AppStrings {
     'profile_following': 'Following',
     'profile_speaks': 'Speaks {lang}',
     'profile_no_language': 'No language',
+    'profile_call_language_warning':
+        'During calls you have to speak only {lang} so the translation works.',
     'profile_edit': 'Edit',
     'profile_loading': 'Loading...',
     'profile_anonymous': 'No name',
@@ -258,6 +262,8 @@ abstract final class AppStrings {
     'profile_following': 'Siguiendo',
     'profile_speaks': 'Habla {lang}',
     'profile_no_language': 'Sin idioma',
+    'profile_call_language_warning':
+        'Durante tus llamadas tendrás que hablar solo {lang} para que funcione la traducción.',
     'profile_edit': 'Editar',
     'profile_loading': 'Cargando...',
     'profile_anonymous': 'Sin nombre',

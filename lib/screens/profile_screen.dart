@@ -268,6 +268,35 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     );
   }
 
+  Future<void> _saveBio(String bio) async {
+    if (_deviceId.isEmpty) return;
+    final saved = await ProfileApi.updateMyBio(userId: _deviceId, bio: bio);
+    if (saved == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sauvegarde échouée.')),
+      );
+      return;
+    }
+    if (!mounted || _remote == null) return;
+    setState(() {
+      _remote = RemoteProfile(
+        id: _remote!.id,
+        handle: _remote!.handle,
+        displayName: _remote!.displayName,
+        language: _remote!.language,
+        avatarColor: _remote!.avatarColor,
+        avatarUrl: _remote!.avatarUrl,
+        bio: saved,
+        isPro: _remote!.isPro,
+        creditsSeconds: _remote!.creditsSeconds,
+        creditsResetAt: _remote!.creditsResetAt,
+        lifetimeCallSeconds: _remote!.lifetimeCallSeconds,
+        proExpiresAt: _remote!.proExpiresAt,
+      );
+    });
+  }
+
   Future<void> _openSettings() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
@@ -325,6 +354,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     counts: _counts,
                     onTapFollowers: () => _openFriendsList(FriendDirection.followers),
                     onTapFollowing: () => _openFriendsList(FriendDirection.following),
+                  ),
+                  const SizedBox(height: 20),
+                  _BioCard(
+                    bio: _remote?.bio ?? '',
+                    onSave: _saveBio,
                   ),
                   const SizedBox(height: 20),
                   _CreditsCard(
@@ -706,6 +740,10 @@ class _LanguageCard extends StatelessWidget {
     final label = language != null
         ? AppStrings.t('profile_speaks', args: {'lang': language!.label})
         : AppStrings.t('profile_no_language');
+    final warning = language != null
+        ? AppStrings.t('profile_call_language_warning',
+            args: {'lang': language!.label})
+        : null;
     return Container(
       decoration: BoxDecoration(
         color: WhatsAppCallTheme.bar,
@@ -713,21 +751,167 @@ class _LanguageCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFF2A3942)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(flag, style: const TextStyle(fontSize: 32)),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
+          Row(
+            children: [
+              Text(flag, style: const TextStyle(fontSize: 32)),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (warning != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 1),
+                  child: Icon(Icons.info_outline,
+                      size: 14, color: WhatsAppCallTheme.subtleText),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    warning,
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.subtleText,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Editable short tagline shown on the user's profile (and later on their
+/// Discover card). Tap → bottom sheet with a TextField (max
+/// [profileBioMaxLength] chars). Empty → placeholder hint.
+class _BioCard extends StatelessWidget {
+  const _BioCard({required this.bio, required this.onSave});
+
+  final String bio;
+  final Future<void> Function(String) onSave;
+
+  static const _placeholder = 'Présente-toi en 2 mots ✏️';
+
+  Future<void> _open(BuildContext context) async {
+    final ctrl = TextEditingController(text: bio);
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: WhatsAppCallTheme.bar,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          16 + MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Ta présentation',
+              style: TextStyle(
                 color: WhatsAppCallTheme.strongText,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              maxLength: profileBioMaxLength,
+              maxLines: 3,
+              minLines: 2,
+              cursorColor: WhatsAppCallTheme.accent,
+              style: const TextStyle(color: WhatsAppCallTheme.strongText),
+              decoration: const InputDecoration(
+                hintText: _placeholder,
+                hintStyle: TextStyle(color: WhatsAppCallTheme.subtleText),
+                filled: true,
+                fillColor: WhatsAppCallTheme.scaffold,
+                border: OutlineInputBorder(
+                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              style: FilledButton.styleFrom(
+                backgroundColor: WhatsAppCallTheme.accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    ctrl.dispose();
+    if (result != null && result != bio) {
+      await onSave(result);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = bio.trim().isEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => _open(context),
+      child: Container(
+        decoration: BoxDecoration(
+          color: WhatsAppCallTheme.bar,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF2A3942)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                empty ? _placeholder : bio,
+                style: TextStyle(
+                  color: empty
+                      ? WhatsAppCallTheme.subtleText
+                      : WhatsAppCallTheme.strongText,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontStyle: empty ? FontStyle.italic : FontStyle.normal,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Icon(Icons.edit_outlined,
+                color: WhatsAppCallTheme.subtleText, size: 18),
+          ],
+        ),
       ),
     );
   }

@@ -16,6 +16,7 @@ class RemoteProfile {
     required this.language,
     required this.avatarColor,
     required this.avatarUrl,
+    this.bio = '',
     this.isPro = false,
     this.creditsSeconds = freeWeeklyCreditsSeconds,
     this.creditsResetAt,
@@ -29,6 +30,10 @@ class RemoteProfile {
   final String language;
   final String avatarColor;
   final String avatarUrl;
+
+  /// Free-form short tagline shown on the user's own profile and on their
+  /// Discover card. Capped at [profileBioMaxLength] characters.
+  final String bio;
 
   /// Subscription state. `true` while the user has an active Premium
   /// entitlement (validated against the store IAP receipt server-side, later).
@@ -75,6 +80,7 @@ class RemoteProfile {
         language: m['language']?.toString() ?? '',
         avatarColor: m['avatar_color']?.toString() ?? '',
         avatarUrl: m['avatar_url']?.toString() ?? '',
+        bio: m['bio']?.toString() ?? '',
         isPro: m['is_pro'] == true,
         creditsSeconds:
             _parseInt(m['credits_seconds'], freeWeeklyCreditsSeconds),
@@ -83,6 +89,10 @@ class RemoteProfile {
         proExpiresAt: _parseDate(m['pro_expires_at']),
       );
 }
+
+/// Maximum number of characters allowed in a profile bio. Enforced on the
+/// client; the DB column should also have a `length(bio) <= 80` check.
+const int profileBioMaxLength = 80;
 
 /// Supabase `profiles` table. Mirror of the local UserPrefs profile so that
 /// other users can discover each other by display name.
@@ -282,6 +292,7 @@ abstract final class ProfileApi {
       language: p.language,
       avatarColor: p.avatarColor,
       avatarUrl: p.avatarUrl,
+      bio: p.bio,
       isPro: p.isPro,
       creditsSeconds: allotment,
       creditsResetAt: nextReset.toLocal(),
@@ -322,6 +333,29 @@ abstract final class ProfileApi {
       return next;
     } catch (e) {
       debugPrint('ProfileApi.consumeCredits failed: $e');
+      return null;
+    }
+  }
+
+  /// Persist the user's short tagline. Trims to [profileBioMaxLength] so a
+  /// client without the right TextField max can't push an oversize string.
+  /// Returns the saved value (the trimmed input) for optimistic updates.
+  static Future<String?> updateMyBio({
+    required String userId,
+    required String bio,
+  }) async {
+    if (!isSupabaseReady || userId.isEmpty) return null;
+    final trimmed = bio.length > profileBioMaxLength
+        ? bio.substring(0, profileBioMaxLength)
+        : bio;
+    try {
+      await _c.from('profiles').update({
+        'bio': trimmed,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', userId);
+      return trimmed;
+    } catch (e) {
+      debugPrint('ProfileApi.updateMyBio failed: $e');
       return null;
     }
   }
