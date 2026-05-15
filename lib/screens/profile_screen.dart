@@ -874,68 +874,50 @@ class _IdentitySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emptyBio = bio.trim().isEmpty;
+    // Posts count for now = 1 if a Discover photo is set, else 0. Wired to
+    // a real `posts` table once multi-post support ships (see SQL in commit).
+    final postsCount = discoverPhotoUrl.isNotEmpty ? 1 : 0;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Insta-style header: avatar + stats inline.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        // Centred avatar (TikTok-style) with the camera badge bottom-right
+        // when editing my own profile.
+        Stack(
+          alignment: Alignment.bottomRight,
           children: [
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                ProfileAvatar(
-                  displayName: displayName,
-                  avatarUrl: avatarUrl,
-                  avatarColorHex: avatarColorHex,
-                  size: 84,
-                  fontSize: 36,
-                  onTap: viewerMode ? null : onTapAvatar,
+            ProfileAvatar(
+              displayName: displayName,
+              avatarUrl: avatarUrl,
+              avatarColorHex: avatarColorHex,
+              size: 96,
+              fontSize: 40,
+              onTap: viewerMode ? null : onTapAvatar,
+            ),
+            if (!viewerMode)
+              Container(
+                width: 28, height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: WhatsAppCallTheme.accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: WhatsAppCallTheme.scaffold, width: 2),
                 ),
-                if (!viewerMode)
-                  Container(
-                    width: 26, height: 26,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: WhatsAppCallTheme.accent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: WhatsAppCallTheme.scaffold, width: 2),
-                    ),
-                    child: const Icon(Icons.camera_alt,
-                        size: 14, color: Colors.white),
-                  ),
-              ],
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _InlineStat(
-                    value: counts.followers,
-                    label: AppStrings.t('profile_followers'),
-                    onTap: onTapFollowers,
-                  ),
-                  _InlineStat(
-                    value: counts.following,
-                    label: AppStrings.t('profile_following'),
-                    onTap: onTapFollowing,
-                  ),
-                ],
+                child: const Icon(Icons.camera_alt,
+                    size: 14, color: Colors.white),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 14),
-        // Display name + handle.
+        // Centred name + handle.
         Text(
           displayName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             color: WhatsAppCallTheme.strongText,
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -944,22 +926,48 @@ class _IdentitySection extends StatelessWidget {
           handle,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             color: WhatsAppCallTheme.subtleText, fontSize: 13,
           ),
         ),
-        const SizedBox(height: 8),
-        // Bio: tap-to-edit on my own profile; flat read-only text when
-        // viewing someone else. Skip rendering an empty bio in viewer mode
-        // (showing "Présente-toi" makes no sense for a third person).
-        if (!viewerMode)
+        const SizedBox(height: 16),
+        // Stats row, TikTok-style: posts | followers | following with a
+        // thin vertical divider between each.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _InlineStat(
+              value: postsCount,
+              label: 'posts',
+            ),
+            const _StatDivider(),
+            _InlineStat(
+              value: counts.followers,
+              label: AppStrings.t('profile_followers').toLowerCase(),
+              onTap: onTapFollowers,
+            ),
+            const _StatDivider(),
+            _InlineStat(
+              value: counts.following,
+              label: AppStrings.t('profile_following').toLowerCase(),
+              onTap: onTapFollowing,
+            ),
+          ],
+        ),
+        // Bio centred, TikTok-style. Tap-to-edit on my own profile, flat
+        // text on someone else's (skipped if empty in viewer mode).
+        if (!viewerMode) ...[
+          const SizedBox(height: 14),
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: () => _openBioEditor(context),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
               child: Text(
                 emptyBio ? _bioPlaceholder : bio,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: emptyBio
                       ? WhatsAppCallTheme.subtleText
@@ -970,12 +978,14 @@ class _IdentitySection extends StatelessWidget {
                 ),
               ),
             ),
-          )
-        else if (!emptyBio)
+          ),
+        ] else if (!emptyBio) ...[
+          const SizedBox(height: 14),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               bio,
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
                 fontSize: 14,
@@ -983,39 +993,38 @@ class _IdentitySection extends StatelessWidget {
               ),
             ),
           ),
-        const SizedBox(height: 14),
-        // Action buttons row — Edit + Settings on my profile, Bloquer /
-        // Débloquer on someone else's.
+        ],
+        const SizedBox(height: 16),
+        // Big primary action button — gradient like TikTok's Follow.
         Row(
           children: [
             if (!viewerMode) ...[
               Expanded(
-                child: _PillButton(
-                  icon: Icons.edit_outlined,
+                child: _GradientActionButton(
                   label: AppStrings.t('profile_edit'),
+                  icon: Icons.edit_outlined,
                   onTap: onEdit,
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: _PillButton(
-                  icon: Icons.settings_outlined,
-                  label: 'Paramètres',
-                  onTap: onSettings,
-                ),
+              _GhostIconButton(
+                icon: Icons.settings_outlined,
+                onTap: onSettings,
+                tooltip: 'Paramètres',
               ),
-            ] else
+            ] else ...[
               Expanded(
-                child: _PillButton(
-                  icon: peerBlocked ? Icons.lock_open : Icons.block,
+                child: _GradientActionButton(
                   label: peerBlocked ? 'Débloquer' : 'Bloquer',
+                  icon: peerBlocked ? Icons.lock_open : Icons.block,
                   onTap: onToggleBlock ?? () {},
                   destructive: !peerBlocked,
                 ),
               ),
+            ],
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 22),
         // Instagram-style 3-column grid. Slot 0 is the Discover photo
         // (the only real one for now). Slots 1-2 tease where future
         // photos will live — tappable on my own profile (opens the
@@ -1044,31 +1053,25 @@ class _PhotosGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPhoto = discoverPhotoUrl.isNotEmpty;
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 3,
-      mainAxisSpacing: 6,
-      crossAxisSpacing: 6,
-      // Square cells like Instagram's posts grid. Discover photo is
-      // portrait but BoxFit.cover handles the crop.
-      children: [
-        _PhotoCell(
-          photoUrl: hasPhoto ? discoverPhotoUrl : null,
-          viewerMode: viewerMode,
-          onTap: onPick,
+    // In viewer mode skip the section entirely when the peer has no
+    // photo — no point showing an empty box for someone else.
+    if (viewerMode && !hasPhoto) return const SizedBox.shrink();
+    // Single tile sized like one cell of a 3-column Insta grid, aligned
+    // left so the rest of the row stays "gridded" visually without
+    // padding fake placeholders.
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: 1 / 3,
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: _PhotoCell(
+            photoUrl: hasPhoto ? discoverPhotoUrl : null,
+            viewerMode: viewerMode,
+            onTap: onPick,
+          ),
         ),
-        _PhotoCell(
-          photoUrl: null,
-          viewerMode: viewerMode,
-          onTap: onPick,
-        ),
-        _PhotoCell(
-          photoUrl: null,
-          viewerMode: viewerMode,
-          onTap: onPick,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -1123,99 +1126,161 @@ class _InlineStat extends StatelessWidget {
   const _InlineStat({
     required this.value,
     required this.label,
-    required this.onTap,
+    this.onTap,
   });
 
   final int value;
   final String label;
-  final VoidCallback onTap;
+  /// Optional — when null the stat is purely decorative (used for the
+  /// posts count, which doesn't navigate anywhere yet).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final col = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$value',
+          style: const TextStyle(
+            color: WhatsAppCallTheme.strongText,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: WhatsAppCallTheme.subtleText,
+            fontSize: 13,
+          ),
+        ),
+      ],
+    );
+    if (onTap == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: col,
+      );
+    }
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$value',
-              style: const TextStyle(
-                color: WhatsAppCallTheme.strongText,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                color: WhatsAppCallTheme.subtleText,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
+        child: col,
       ),
     );
   }
 }
 
-class _PillButton extends StatelessWidget {
-  const _PillButton({
-    required this.icon,
+class _StatDivider extends StatelessWidget {
+  const _StatDivider();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1, height: 28,
+      color: const Color(0xFF2A3942),
+    );
+  }
+}
+
+class _GradientActionButton extends StatelessWidget {
+  const _GradientActionButton({
     required this.label,
+    required this.icon,
     required this.onTap,
     this.destructive = false,
   });
 
-  final IconData icon;
   final String label;
+  final IconData icon;
   final VoidCallback onTap;
-  /// When true, renders the label/icon in red — used for the "Bloquer"
-  /// state of the viewer-mode action button.
   final bool destructive;
 
   @override
   Widget build(BuildContext context) {
-    final fg = destructive
-        ? const Color(0xFFE53935)
-        : WhatsAppCallTheme.strongText;
+    final gradient = destructive
+        ? const LinearGradient(
+            colors: [Color(0xFFFF5C5C), Color(0xFFE53935)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : const LinearGradient(
+            colors: [WhatsAppCallTheme.accent, Color(0xFFFFB037)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          );
     return Material(
-      color: WhatsAppCallTheme.bar,
-      borderRadius: BorderRadius.circular(10),
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
+        child: Ink(
           decoration: BoxDecoration(
-            border: Border.all(
-                color: destructive
-                    ? fg.withValues(alpha: 0.35)
-                    : const Color(0xFF2A3942)),
-            borderRadius: BorderRadius.circular(10),
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(999),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16, color: fg),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+
+class _GhostIconButton extends StatelessWidget {
+  const _GhostIconButton({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: WhatsAppCallTheme.bar,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Tooltip(
+          message: tooltip,
+          child: Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFF2A3942)),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Icon(icon, size: 18,
+                color: WhatsAppCallTheme.subtleText),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
