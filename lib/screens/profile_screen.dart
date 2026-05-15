@@ -1440,11 +1440,11 @@ class _GradientActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Solid colors instead of gradients — cleaner, matches the avatar
-    // bubble blue. Destructive variant stays red.
+    // Solid colors instead of gradients — primary accent (site green) for
+    // the default action, red for destructive (Bloquer).
     final bg = destructive
         ? const Color(0xFFE53935)
-        : const Color(0xFF2D7FF9);
+        : WhatsAppCallTheme.accent;
     return Material(
       color: bg,
       borderRadius: BorderRadius.circular(999),
