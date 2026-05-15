@@ -279,8 +279,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       appBar: _ThreadHeader(
         title: widget.title,
         peer: _peer,
-        autoTranslate: _autoTranslate,
-        onToggleTranslate: _toggleAutoTranslate,
         onCall: () => CallLauncher.startCall(
           context,
           peerDeviceId: widget.peerDeviceId,
@@ -297,6 +295,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             controller: _inputCtrl,
             sending: _sending,
             onSend: _send,
+            autoTranslate: _autoTranslate,
+            onToggleTranslate: _toggleAutoTranslate,
           ),
         ],
       ),
@@ -343,16 +343,12 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
   const _ThreadHeader({
     required this.title,
     required this.peer,
-    required this.autoTranslate,
-    required this.onToggleTranslate,
     required this.onCall,
     required this.peerBlocked,
     required this.onToggleBlock,
   });
   final String title;
   final RemoteProfile? peer;
-  final bool autoTranslate;
-  final VoidCallback onToggleTranslate;
   final VoidCallback onCall;
   final bool peerBlocked;
   final VoidCallback onToggleBlock;
@@ -384,37 +380,10 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: Center(
-            child: GestureDetector(
-              onTap: onToggleTranslate,
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.translate,
-                    size: 18,
-                    color: autoTranslate
-                        ? WhatsAppCallTheme.accent
-                        : Colors.white.withValues(alpha: 0.78),
-                  ),
-                  const SizedBox(width: 6),
-                  _TranslatePill(
-                    active: autoTranslate,
-                    onTap: onToggleTranslate,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
         IconButton(
-          tooltip: 'Appel vidéo',
+          tooltip: 'Appeler',
           onPressed: onCall,
-          icon: const Icon(Icons.videocam_outlined),
+          icon: const Icon(Icons.phone),
         ),
         PopupMenuButton<String>(
           tooltip: 'Plus',
@@ -451,68 +420,6 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
         ),
         const SizedBox(width: 4),
       ],
-    );
-  }
-}
-
-/// Dark pill with a glowing orb on one side — taps toggle the auto-translate
-/// state. Mimics a physical switch where the "on" position lights up.
-class _TranslatePill extends StatelessWidget {
-  const _TranslatePill({required this.active, required this.onTap});
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const w = 44.0;
-    const h = 22.0;
-    const ball = 18.0;
-    return Tooltip(
-      message: active ? 'Traduction auto activée' : 'Traduire les messages',
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: w,
-          height: h,
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A3942),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-          ),
-          child: AnimatedAlign(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment: active ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              width: ball,
-              height: ball,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: active
-                    ? const RadialGradient(
-                        colors: [
-                          WhatsAppCallTheme.accent,
-                          WhatsAppCallTheme.accentMuted,
-                        ],
-                      )
-                    : null,
-                color: active ? null : Colors.white.withValues(alpha: 0.35),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                          color: WhatsAppCallTheme.accent.withValues(alpha: 0.55),
-                          blurRadius: 10,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -612,11 +519,15 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.sending,
     required this.onSend,
+    required this.autoTranslate,
+    required this.onToggleTranslate,
   });
 
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
+  final bool autoTranslate;
+  final VoidCallback onToggleTranslate;
 
   @override
   Widget build(BuildContext context) {
@@ -643,7 +554,34 @@ class _Composer extends StatelessWidget {
                     hintStyle: const TextStyle(color: WhatsAppCallTheme.subtleText),
                     filled: true,
                     fillColor: WhatsAppCallTheme.surface,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    contentPadding: const EdgeInsets.fromLTRB(2, 10, 14, 10),
+                    // Translate toggle lives inside the field on the left,
+                    // pushing the "Message" hint to the right. Tap flips
+                    // auto-translate state for the thread.
+                    prefixIcon: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onToggleTranslate,
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 6, right: 6),
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: autoTranslate
+                              ? WhatsAppCallTheme.accent.withValues(alpha: 0.18)
+                              : Colors.transparent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.translate,
+                          size: 18,
+                          color: autoTranslate
+                              ? WhatsAppCallTheme.accent
+                              : WhatsAppCallTheme.subtleText,
+                        ),
+                      ),
+                    ),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 40, minHeight: 32,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(22),
                       borderSide: BorderSide.none,
