@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/app_strings.dart';
 import '../services/block_api.dart';
 import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
@@ -76,19 +77,21 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: WhatsAppCallTheme.bar,
         title: Text(
-          wasBlocked ? 'Débloquer $peerName ?' : 'Bloquer $peerName ?',
+          AppStrings.t(
+            wasBlocked ? 'unblock_peer_q' : 'block_peer_q',
+            args: {'name': peerName},
+          ),
           style: const TextStyle(color: WhatsAppCallTheme.strongText),
         ),
         content: Text(
-          wasBlocked
-              ? 'Cette personne pourra à nouveau te trouver, te contacter et voir tes messages.'
-              : 'Cette personne ne pourra plus te trouver, te contacter ni t\'appeler. Tu peux annuler à tout moment depuis Paramètres → Bloqués.',
+          AppStrings.t(
+              wasBlocked ? 'unblock_peer_body' : 'block_peer_body'),
           style: const TextStyle(color: WhatsAppCallTheme.subtleText),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.t('cancel')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -97,7 +100,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   : const Color(0xFFE53935),
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(wasBlocked ? 'Débloquer' : 'Bloquer'),
+            child: Text(AppStrings.t(wasBlocked ? 'unblock' : 'block')),
           ),
         ],
       ),
@@ -315,8 +318,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Text(
-            'Aucun message — écris le premier !',
-            style: TextStyle(
+            AppStrings.t('no_messages'),
+            style: const TextStyle(
               color: WhatsAppCallTheme.subtleText,
               fontSize: 14,
             ),
@@ -393,12 +396,12 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         IconButton(
-          tooltip: 'Appeler',
+          tooltip: AppStrings.t('tooltip_call'),
           onPressed: onCall,
           icon: const Icon(Icons.phone),
         ),
         PopupMenuButton<String>(
-          tooltip: 'Plus',
+          tooltip: AppStrings.t('tooltip_more'),
           icon: const Icon(Icons.more_vert),
           color: WhatsAppCallTheme.bar,
           onSelected: (value) {
@@ -418,7 +421,7 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    peerBlocked ? 'Débloquer' : 'Bloquer',
+                    AppStrings.t(peerBlocked ? 'unblock' : 'block'),
                     style: TextStyle(
                       color: peerBlocked
                           ? WhatsAppCallTheme.accent
@@ -562,7 +565,7 @@ class _Composer extends StatelessWidget {
                   textCapitalization: TextCapitalization.sentences,
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
                   decoration: InputDecoration(
-                    hintText: 'Message',
+                    hintText: AppStrings.t('composer_message_hint'),
                     hintStyle: const TextStyle(color: WhatsAppCallTheme.subtleText),
                     filled: true,
                     fillColor: WhatsAppCallTheme.surface,

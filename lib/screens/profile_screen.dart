@@ -145,25 +145,29 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   Future<void> _toggleBlock() async {
     if (_targetId.isEmpty || _deviceId.isEmpty) return;
     final wasBlocked = _peerBlocked;
-    final name = _displayName.isEmpty ? 'cette personne' : _displayName;
+    final name = _displayName.isEmpty
+        ? AppStrings.t('incoming_someone').toLowerCase()
+        : _displayName;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: WhatsAppCallTheme.bar,
         title: Text(
-          wasBlocked ? 'Débloquer $name ?' : 'Bloquer $name ?',
+          AppStrings.t(
+            wasBlocked ? 'unblock_peer_q' : 'block_peer_q',
+            args: {'name': name},
+          ),
           style: const TextStyle(color: WhatsAppCallTheme.strongText),
         ),
         content: Text(
-          wasBlocked
-              ? 'Cette personne pourra à nouveau te trouver, te contacter et voir tes messages.'
-              : 'Cette personne ne pourra plus te trouver, te contacter ni t\'appeler. Tu peux annuler depuis Paramètres → Bloqués.',
+          AppStrings.t(
+              wasBlocked ? 'unblock_peer_body' : 'block_peer_body'),
           style: const TextStyle(color: WhatsAppCallTheme.subtleText),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.t('cancel')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -172,7 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                   : const Color(0xFFE53935),
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(wasBlocked ? 'Débloquer' : 'Bloquer'),
+            child: Text(AppStrings.t(wasBlocked ? 'unblock' : 'block')),
           ),
         ],
       ),
@@ -437,13 +441,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: WhatsAppCallTheme.bar,
-        title: const Text(
-          'Supprimer la photo ?',
-          style: TextStyle(color: WhatsAppCallTheme.strongText),
+        title: Text(
+          AppStrings.t('delete_photo_q'),
+          style: const TextStyle(color: WhatsAppCallTheme.strongText),
         ),
-        content: const Text(
-          'Ta photo Discover sera retirée. Tu pourras en uploader une nouvelle à tout moment.',
-          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        content: Text(
+          AppStrings.t('delete_photo_body'),
+          style: const TextStyle(color: WhatsAppCallTheme.subtleText),
         ),
         actions: [
           TextButton(
@@ -454,7 +458,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
             style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFE53935)),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Supprimer'),
+            child: Text(AppStrings.t('delete')),
           ),
         ],
       ),
@@ -525,7 +529,9 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
               foregroundColor: WhatsAppCallTheme.strongText,
               elevation: 0,
               title: Text(
-                _displayName.isEmpty ? 'Profil' : _displayName,
+                _displayName.isEmpty
+                    ? AppStrings.t('profile_default_title')
+                    : _displayName,
                 style: const TextStyle(
                     fontSize: 18, fontWeight: FontWeight.w700),
               ),
@@ -934,9 +940,9 @@ class _IdentitySection extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Ta présentation',
-              style: TextStyle(
+            Text(
+              AppStrings.t('bio_editor_title'),
+              style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -970,7 +976,7 @@ class _IdentitySection extends StatelessWidget {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text('Enregistrer'),
+              child: Text(AppStrings.t('save')),
             ),
           ],
         ),
@@ -1123,12 +1129,12 @@ class _IdentitySection extends StatelessWidget {
               _GhostIconButton(
                 icon: Icons.settings_outlined,
                 onTap: onSettings,
-                tooltip: 'Paramètres',
+                tooltip: AppStrings.t('settings_title'),
               ),
             ] else ...[
               Expanded(
                 child: _GradientActionButton(
-                  label: peerBlocked ? 'Débloquer' : 'Bloquer',
+                  label: AppStrings.t(peerBlocked ? 'unblock' : 'block'),
                   icon: peerBlocked ? Icons.lock_open : Icons.block,
                   onTap: onToggleBlock ?? () {},
                   destructive: !peerBlocked,

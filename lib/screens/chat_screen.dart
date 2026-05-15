@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/app_strings.dart';
 import '../services/block_api.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
@@ -170,23 +171,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       builder: (ctx) => AlertDialog(
         backgroundColor: WhatsAppCallTheme.bar,
         title: Text(
-          'Bloquer ${peer.displayName} ?',
+          AppStrings.t('block_peer_q', args: {'name': peer.displayName}),
           style: const TextStyle(color: WhatsAppCallTheme.strongText),
         ),
-        content: const Text(
-          'Cette personne ne pourra plus te trouver, te contacter ni t\'appeler. Tu peux annuler depuis Paramètres → Bloqués.',
-          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        content: Text(
+          AppStrings.t('block_peer_body'),
+          style: const TextStyle(color: WhatsAppCallTheme.subtleText),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.t('cancel')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFE53935)),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Bloquer'),
+            child: Text(AppStrings.t('block')),
           ),
         ],
       ),
@@ -195,13 +196,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     try {
       await BlockApi.block(blockerId: _myId, blockedId: peer.id);
       if (!mounted) return;
+      // Snackbar = compact confirmation, reuse the block label.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${peer.displayName} bloqué.')),
+        SnackBar(content: Text('${peer.displayName} · ${AppStrings.t('block')}')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppStrings.t('error_prefix', args: {'msg': '$e'})),
+      ));
     }
   }
 
@@ -213,13 +216,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         bottom: false,
         child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Messages',
-                  style: TextStyle(
+                  AppStrings.t('messages_title'),
+                  style: const TextStyle(
                     color: WhatsAppCallTheme.strongText,
                     fontSize: 26,
                     fontWeight: FontWeight.w700,
@@ -328,7 +331,9 @@ class _FriendChatRow extends StatelessWidget {
     final lang = findLanguageByCode(profile.language);
     final name = profile.displayName.isNotEmpty
         ? profile.displayName
-        : (profile.handle.isNotEmpty ? '@${profile.handle}' : 'Sans nom');
+        : (profile.handle.isNotEmpty
+            ? '@${profile.handle}'
+            : AppStrings.t('chat_no_name'));
 
     final subtitleParts = <InlineSpan>[];
     if (lastMessage != null && lastMessage!.body.isNotEmpty) {
@@ -345,7 +350,7 @@ class _FriendChatRow extends StatelessWidget {
     } else if (lang != null) {
       subtitleParts.add(TextSpan(text: '${lang.flag}  ${lang.label}'));
     } else {
-      subtitleParts.add(const TextSpan(text: 'Toucher pour discuter'));
+      subtitleParts.add(TextSpan(text: AppStrings.t('chat_tap_to_chat')));
     }
 
     return InkWell(
@@ -434,43 +439,45 @@ class _FriendChatRow extends StatelessWidget {
                           color: WhatsAppCallTheme.subtleText, size: 18),
                     ),
                     PopupMenuButton<String>(
-                      tooltip: 'Plus',
+                      tooltip: AppStrings.t('tooltip_more'),
                       padding: EdgeInsets.zero,
                       icon: const Icon(Icons.more_vert,
                           color: WhatsAppCallTheme.subtleText, size: 20),
                       color: WhatsAppCallTheme.bar,
-              onSelected: (v) {
-                if (v == 'profile') onViewProfile();
-                if (v == 'block') onBlock();
-              },
-              itemBuilder: (ctx) => const [
-                PopupMenuItem<String>(
-                  value: 'profile',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline,
-                          size: 18, color: WhatsAppCallTheme.strongText),
-                      SizedBox(width: 10),
-                      Text('Voir profil',
-                          style: TextStyle(
-                              color: WhatsAppCallTheme.strongText)),
-                    ],
-                  ),
-                ),
-                PopupMenuItem<String>(
-                  value: 'block',
-                  child: Row(
-                    children: [
-                      Icon(Icons.block,
-                          size: 18, color: Color(0xFFE53935)),
-                      SizedBox(width: 10),
-                      Text('Bloquer',
-                          style: TextStyle(color: Color(0xFFE53935))),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                      onSelected: (v) {
+                        if (v == 'profile') onViewProfile();
+                        if (v == 'block') onBlock();
+                      },
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem<String>(
+                          value: 'profile',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.person_outline,
+                                  size: 18,
+                                  color: WhatsAppCallTheme.strongText),
+                              const SizedBox(width: 10),
+                              Text(AppStrings.t('view_profile'),
+                                  style: const TextStyle(
+                                      color: WhatsAppCallTheme.strongText)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'block',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.block,
+                                  size: 18, color: Color(0xFFE53935)),
+                              const SizedBox(width: 10),
+                              Text(AppStrings.t('block'),
+                                  style: const TextStyle(
+                                      color: Color(0xFFE53935))),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -507,21 +514,23 @@ class _NoFriendsEmpty extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Pas encore d\'amis',
+            Text(
+              AppStrings.t('chat_no_friends_title'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Va dans l\'onglet Recherche pour trouver quelqu\'un par son prénom, '
-              'puis envoie une demande d\'ami pour pouvoir discuter avec lui.',
+            Text(
+              AppStrings.t('chat_no_friends_body'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13, height: 1.4),
+              style: const TextStyle(
+                  color: WhatsAppCallTheme.subtleText,
+                  fontSize: 13,
+                  height: 1.4),
             ),
           ],
         ),

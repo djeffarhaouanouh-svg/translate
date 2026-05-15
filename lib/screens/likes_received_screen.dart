@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/app_strings.dart';
 import '../services/device_id.dart';
 import '../services/like_api.dart';
 import '../services/profile_api.dart';
@@ -46,9 +47,9 @@ class _LikesReceivedScreenState extends State<LikesReceivedScreen> {
         backgroundColor: WhatsAppCallTheme.scaffold,
         foregroundColor: WhatsAppCallTheme.strongText,
         elevation: 0,
-        title: const Text(
-          'Qui m\'a liké',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        title: Text(
+          AppStrings.t('who_liked_me'),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
       ),
       body: _loading
@@ -149,28 +150,28 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.favorite_border,
+            const Icon(Icons.favorite_border,
                 size: 56, color: WhatsAppCallTheme.subtleText),
-            SizedBox(height: 14),
+            const SizedBox(height: 14),
             Text(
-              'Personne ne t\'a encore liké',
-              style: TextStyle(
+              AppStrings.t('no_one_liked_yet'),
+              style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              'Quand quelqu\'un appuie sur le ❤ de ta carte Discover, tu le verras apparaître ici.',
+              AppStrings.t('like_explainer'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: WhatsAppCallTheme.subtleText,
                 fontSize: 13,
                 height: 1.4,

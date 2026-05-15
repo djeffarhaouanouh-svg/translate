@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/app_strings.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
@@ -132,7 +133,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         }
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible d\'enregistrer le like.')),
+        SnackBar(content: Text(AppStrings.t('like_save_failed'))),
       );
     }
   }
@@ -522,9 +523,9 @@ class _DiscoverHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
-          const Text(
-            'Discover',
-            style: TextStyle(
+          Text(
+            AppStrings.t('discover_title'),
+            style: const TextStyle(
               color: WhatsAppCallTheme.strongText,
               fontSize: 26,
               fontWeight: FontWeight.w700,
@@ -563,10 +564,10 @@ class _DiscoverHeader extends StatelessWidget {
                         color: WhatsAppCallTheme.strongText,
                         fontSize: 13,
                       ),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         isDense: true,
-                        hintText: 'Prénom de l\'ami',
-                        hintStyle: TextStyle(
+                        hintText: AppStrings.t('search_friend_hint'),
+                        hintStyle: const TextStyle(
                           color: WhatsAppCallTheme.subtleText,
                           fontSize: 13,
                         ),
@@ -579,9 +580,9 @@ class _DiscoverHeader extends StatelessWidget {
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onTapPill,
-                    child: const Text(
-                      'Chercher',
-                      style: TextStyle(
+                    child: Text(
+                      AppStrings.t('search_chercher'),
+                      style: const TextStyle(
                         color: WhatsAppCallTheme.subtleText,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -609,14 +610,14 @@ class _DiscoverHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
               border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.tune, size: 16, color: WhatsAppCallTheme.subtleText),
-                SizedBox(width: 6),
+                const Icon(Icons.tune, size: 16, color: WhatsAppCallTheme.subtleText),
+                const SizedBox(width: 6),
                 Text(
-                  'Filtres',
-                  style: TextStyle(
+                  AppStrings.t('filters'),
+                  style: const TextStyle(
                     color: WhatsAppCallTheme.subtleText,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -661,12 +662,12 @@ class _SearchResultsPanel extends StatelessWidget {
 
   Widget _buildBody() {
     if (query.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(20),
+      return Padding(
+        padding: const EdgeInsets.all(20),
         child: Text(
-          'Tape les premières lettres d\'un prénom.',
-          style:
-              TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 13),
+          AppStrings.t('search_intro_hint'),
+          style: const TextStyle(
+              color: WhatsAppCallTheme.subtleText, fontSize: 13),
         ),
       );
     }
@@ -770,11 +771,16 @@ class _SearchResultRow extends StatelessWidget {
   Widget _statusButton() {
     switch (status) {
       case FriendshipStatus.accepted:
-        return const _StatusPill(label: 'Ami', color: WhatsAppCallTheme.accent);
+        return _StatusPill(
+            label: AppStrings.t('friendship_friend'),
+            color: WhatsAppCallTheme.accent);
       case FriendshipStatus.pendingOutgoing:
-        return const _StatusPill(label: 'Envoyé', color: Colors.amber);
+        return _StatusPill(
+            label: AppStrings.t('friendship_sent'), color: Colors.amber);
       case FriendshipStatus.pendingIncoming:
-        return const _StatusPill(label: 'À accepter', color: Colors.amber);
+        return _StatusPill(
+            label: AppStrings.t('friendship_pending_in'),
+            color: Colors.amber);
       case FriendshipStatus.rejected:
       case FriendshipStatus.none:
         return Material(
@@ -783,11 +789,14 @@ class _SearchResultRow extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(999),
             onTap: onAdd,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 7),
               child: Text(
-                'Ajouter',
-                style: TextStyle(
+                // Reuses the search-result "Ajouter" button label —
+                // localised via the friendship_sent / etc. keys' sibling.
+                AppStrings.t('add_friend_short'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1054,9 +1063,11 @@ class _AddButtonState extends State<_AddButton>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Envoyer ',
-                style: TextStyle(
+              // Strip the 👋 from the i18n string so we can animate it on
+              // its own next to the localised verb.
+              Text(
+                '${AppStrings.t('send_emoji').replaceAll('👋', '').trim()} ',
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -1135,10 +1146,10 @@ class _Empty extends StatelessWidget {
                   color: WhatsAppCallTheme.subtleText, size: 34),
             ),
             const SizedBox(height: 18),
-            const Text(
-              "C'est tout pour aujourd'hui",
+            Text(
+              AppStrings.t('discover_done'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -1148,9 +1159,9 @@ class _Empty extends StatelessWidget {
             TextButton.icon(
               onPressed: onReset,
               icon: const Icon(Icons.refresh, color: WhatsAppCallTheme.accent),
-              label: const Text(
-                'Recommencer',
-                style: TextStyle(color: WhatsAppCallTheme.accent),
+              label: Text(
+                AppStrings.t('restart'),
+                style: const TextStyle(color: WhatsAppCallTheme.accent),
               ),
             ),
           ],

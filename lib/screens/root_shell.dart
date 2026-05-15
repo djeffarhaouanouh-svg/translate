@@ -75,7 +75,7 @@ class _RootShellState extends State<RootShell> {
       builder: (ctx) => _IncomingCallDialog(
         callerName: caller?.displayName.isNotEmpty == true
             ? caller!.displayName
-            : 'Quelqu\'un',
+            : AppStrings.t('incoming_someone'),
         callerAvatarUrl: caller?.avatarUrl,
         callerAvatarColor: caller?.avatarColor,
       ),
@@ -117,7 +117,7 @@ class _RootShellState extends State<RootShell> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Impossible de rejoindre l\'appel : $e')),
+        SnackBar(content: Text(AppStrings.t('cant_join_call', args: {'msg': '$e'}))),
       );
     }
   }
@@ -407,9 +407,9 @@ class _IncomingCallDialogState extends State<_IncomingCallDialog> {
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Appel entrant…',
-              style: TextStyle(
+            Text(
+              AppStrings.t('incoming_call_label'),
+              style: const TextStyle(
                 color: WhatsAppCallTheme.subtleText,
                 fontSize: 14,
               ),
@@ -420,13 +420,13 @@ class _IncomingCallDialogState extends State<_IncomingCallDialog> {
               children: [
                 _RoundActionButton(
                   icon: Icons.call_end,
-                  label: 'Refuser',
+                  label: AppStrings.t('decline'),
                   color: const Color(0xFFE53935),
                   onTap: () => Navigator.of(context).pop(false),
                 ),
                 _RoundActionButton(
                   icon: Icons.call,
-                  label: 'Accepter',
+                  label: AppStrings.t('accept'),
                   color: WhatsAppCallTheme.accent,
                   onTap: () => Navigator.of(context).pop(true),
                 ),
