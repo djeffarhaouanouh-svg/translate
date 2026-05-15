@@ -379,7 +379,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
               )
             : ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                // Reserve room for the floating bottom nav (height 54 + 12 gap)
+                // plus the device's bottom safe-area inset, otherwise the last
+                // card gets occluded.
+                padding: EdgeInsets.fromLTRB(
+                  20, 20, 20,
+                  32 + 64 + MediaQuery.paddingOf(context).bottom,
+                ),
                 children: [
                   _IdentitySection(
                     displayName: _displayName.isEmpty
