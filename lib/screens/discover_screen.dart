@@ -32,6 +32,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     });
   }
 
+  void _addFriend(String name) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Demande envoyée à $name'),
+        duration: const Duration(seconds: 2),
+        backgroundColor: WhatsAppCallTheme.bar,
+      ),
+    );
+  }
+
   void _reset() {
     setState(() => _topIndex = 0);
   }
@@ -45,34 +55,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         child: Column(
           children: [
             const _DiscoverHeader(),
-            Expanded(child: _topIndex >= _profiles.length ? _Empty(onReset: _reset) : _buildStack()),
-            // Bottom controls — guaranteed to advance the card on every platform.
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                  24, 8, 24, 24 + MediaQuery.paddingOf(context).bottom + 64),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _RoundButton(
-                    icon: Icons.close,
-                    color: Colors.white,
-                    bg: WhatsAppCallTheme.bar,
-                    onTap: _topIndex < _profiles.length ? _advance : null,
-                  ),
-                  _RoundButton(
-                    icon: Icons.favorite,
-                    color: Colors.white,
-                    bg: const Color(0xFFFF3B5C),
-                    onTap: _topIndex < _profiles.length
-                        ? () {
-                            _toggleLike(_profiles[_topIndex].name);
-                            _advance();
-                          }
-                        : null,
-                  ),
-                ],
-              ),
+            Expanded(
+              child: _topIndex >= _profiles.length
+                  ? _Empty(onReset: _reset)
+                  : _buildStack(),
             ),
+            // Spacer for the floating bottom nav.
+            SizedBox(height: 12 + MediaQuery.paddingOf(context).bottom + 64),
           ],
         ),
       ),
@@ -94,28 +83,41 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   child: Transform.scale(
                     scale: 1 - depth * 0.05,
                     child: IgnorePointer(
-                      child: _ProfileCard(profile: _profiles[_topIndex + depth]),
+                      child: _ProfileCard(
+                        profile: _profiles[_topIndex + depth],
+                        liked: false,
+                        onAdd: () {},
+                        onToggleLike: () {},
+                      ),
                     ),
                   ),
                 ),
               ),
-          // Top card — Dismissible handles the swipe (works on web & mobile).
-          Dismissible(
-            key: ValueKey(_topIndex),
-            direction: DismissDirection.horizontal,
-            // Trigger at 25% of the card width — Tinder-ish.
-            dismissThresholds: const {
-              DismissDirection.horizontal: 0.25,
-              DismissDirection.startToEnd: 0.25,
-              DismissDirection.endToStart: 0.25,
-            },
-            onDismissed: (dir) {
-              if (dir == DismissDirection.startToEnd) {
-                _liked.add(_profiles[_topIndex].name);
-              }
-              _advance();
-            },
-            child: _ProfileCard(profile: _profiles[_topIndex]),
+          // Top card — Dismissible handles the swipe. Positioned.fill so it
+          // covers the same area as the background cards (otherwise it'd size
+          // to its child's intrinsic, which is undefined for our expanded card).
+          Positioned.fill(
+            child: Dismissible(
+              key: ValueKey(_topIndex),
+              direction: DismissDirection.horizontal,
+              dismissThresholds: const {
+                DismissDirection.horizontal: 0.25,
+                DismissDirection.startToEnd: 0.25,
+                DismissDirection.endToStart: 0.25,
+              },
+              onDismissed: (dir) {
+                if (dir == DismissDirection.startToEnd) {
+                  _liked.add(_profiles[_topIndex].name);
+                }
+                _advance();
+              },
+              child: _ProfileCard(
+                profile: _profiles[_topIndex],
+                liked: _liked.contains(_profiles[_topIndex].name),
+                onAdd: () => _addFriend(_profiles[_topIndex].name),
+                onToggleLike: () => _toggleLike(_profiles[_topIndex].name),
+              ),
+            ),
           ),
         ],
       ),
@@ -162,9 +164,17 @@ class _DiscoverHeader extends StatelessWidget {
 }
 
 class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.profile});
+  const _ProfileCard({
+    required this.profile,
+    required this.liked,
+    required this.onAdd,
+    required this.onToggleLike,
+  });
 
   final _DemoProfile profile;
+  final bool liked;
+  final VoidCallback onAdd;
+  final VoidCallback onToggleLike;
 
   @override
   Widget build(BuildContext context) {
@@ -173,8 +183,6 @@ class _ProfileCard extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Solid base color so the card is opaque even when the asset image
-          // is missing (web build doesn't bundle assets/ yet).
           const ColoredBox(color: WhatsAppCallTheme.bar),
           Image.asset(
             'assets/demo_profile.png',
@@ -252,6 +260,14 @@ class _ProfileCard extends StatelessWidget {
                     height: 1.35,
                   ),
                 ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _AddButton(onTap: onAdd),
+                    const Spacer(),
+                    _LikeHeart(liked: liked, onTap: onToggleLike),
+                  ],
+                ),
               ],
             ),
           ),
@@ -261,32 +277,72 @@ class _ProfileCard extends StatelessWidget {
   }
 }
 
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.color,
-    required this.bg,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final Color bg;
-  final VoidCallback? onTap;
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.onTap});
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: bg,
+      color: WhatsAppCallTheme.accent,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.person_add_alt_1, size: 18, color: Colors.white),
+              SizedBox(width: 6),
+              Text(
+                'Ajouter',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LikeHeart extends StatelessWidget {
+  const _LikeHeart({required this.liked, required this.onTap});
+  final bool liked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFFF3B5C);
+    return Material(
+      color: Colors.black.withValues(alpha: 0.35),
       shape: const CircleBorder(),
-      elevation: 4,
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 64,
-          height: 64,
-          child: Icon(icon, color: color, size: 30),
+          width: 44,
+          height: 44,
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
+              child: Icon(
+                liked ? Icons.favorite : Icons.favorite_border,
+                key: ValueKey(liked),
+                size: 24,
+                color: liked ? red : Colors.white,
+              ),
+            ),
+          ),
         ),
       ),
     );
