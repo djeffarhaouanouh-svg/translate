@@ -307,28 +307,25 @@ class _LikeHeart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const red = Color(0xFFFF3B5C);
-    return Material(
-      color: Colors.black.withValues(alpha: 0.35),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: Icon(
-                liked ? Icons.favorite : Icons.favorite_border,
-                key: ValueKey(liked),
-                size: 24,
-                color: liked ? red : Colors.white,
-              ),
-            ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: liked ? red.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.35),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: liked ? red : Colors.white.withValues(alpha: 0.20),
+            width: liked ? 2 : 1,
           ),
+        ),
+        child: Icon(
+          liked ? Icons.favorite : Icons.favorite_border,
+          size: liked ? 28 : 24,
+          color: liked ? red : Colors.white,
         ),
       ),
     );
