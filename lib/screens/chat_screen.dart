@@ -351,11 +351,16 @@ class _FriendChatRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            ProfileAvatar(
-              displayName: profile.displayName,
-              avatarUrl: profile.avatarUrl,
-              avatarColorHex: profile.avatarColor,
-              size: 60,
+            // Avatar = direct shortcut to the peer's profile (Insta-style).
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onViewProfile,
+              child: ProfileAvatar(
+                displayName: profile.displayName,
+                avatarUrl: profile.avatarUrl,
+                avatarColorHex: profile.avatarColor,
+                size: 60,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -367,15 +372,22 @@ class _FriendChatRow extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
-                          style: const TextStyle(
-                            color: WhatsAppCallTheme.strongText,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 17,
+                        // Tapping the name also jumps to the profile —
+                        // matches the "tap on someone's name to see them"
+                        // intuition from Insta / Twitter / iMessage.
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: onViewProfile,
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: const TextStyle(
+                              color: WhatsAppCallTheme.strongText,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 17,
+                            ),
                           ),
                         ),
                       ),

@@ -1365,46 +1365,34 @@ class _GradientActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradient = destructive
-        ? const LinearGradient(
-            colors: [Color(0xFFFF5C5C), Color(0xFFE53935)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-        : const LinearGradient(
-            colors: [WhatsAppCallTheme.accent, Color(0xFFFFB037)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          );
+    // Solid colors instead of gradients — cleaner, matches the avatar
+    // bubble blue. Destructive variant stays red.
+    final bg = destructive
+        ? const Color(0xFFE53935)
+        : const Color(0xFF2D7FF9);
     return Material(
-      color: Colors.transparent,
+      color: bg,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: gradient,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 18, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
