@@ -58,14 +58,14 @@ dev_dependencies:
 
 flutter_native_splash:
   color: "#000000"
-  image: assets/icon-swayco.png
+  image: assets/icon-sway.png
   color_dark: "#000000"
-  image_dark: assets/icon-swayco.png
+  image_dark: assets/icon-sway.png
   android_12:
     color: "#000000"
-    image: assets/icon-swayco.png
+    image: assets/icon-sway.png
     color_dark: "#000000"
-    image_dark: assets/icon-swayco.png
+    image_dark: assets/icon-sway.png
   android: true
   ios: true
   web: false
@@ -82,7 +82,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/icon-swayco.png
+    - assets/icon-sway.png
     - assets/demo_profile.png
 
   # To add assets to your application, add an assets section, like this:
