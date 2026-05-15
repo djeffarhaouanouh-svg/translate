@@ -400,14 +400,14 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onSettings: _openSettings,
                   ),
                   const SizedBox(height: 20),
+                  _LanguageCard(language: lang),
+                  const SizedBox(height: 16),
                   _CreditsCard(
                     profile: _remote,
                     onUpgrade: _remote != null && !_remote!.isPro
                         ? _upgradeToPremium
                         : null,
                   ),
-                  const SizedBox(height: 16),
-                  _LanguageCard(language: lang),
                 ],
               ),
         ),
