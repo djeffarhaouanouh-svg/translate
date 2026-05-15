@@ -6,12 +6,14 @@ import '../services/block_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
+import '../services/like_api.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 import 'friends_list_screen.dart';
+import 'likes_received_screen.dart';
 import 'onboarding_screen.dart';
 import 'settings_screen.dart';
 
@@ -39,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   RemoteProfile? _remote;
   ProfileSnapshot? _local;
   FriendshipCounts _counts = const FriendshipCounts(followers: 0, following: 0);
+  int _likesCount = 0;
   bool _loading = true;
   // Viewer-mode only: am I currently blocking the displayed user?
   bool _peerBlocked = false;
@@ -79,6 +82,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final counts = isSupabaseReady
         ? await FriendshipApi.countsFor(targetId)
         : const FriendshipCounts(followers: 0, following: 0);
+    // Likes received are only meaningful (and visible) on my own profile.
+    // The peer's count would leak who liked them.
+    final likes = !_isViewingOther && isSupabaseReady
+        ? await LikeApi.countLikersOf(targetId)
+        : 0;
     final blocked = _isViewingOther && isSupabaseReady && deviceId.isNotEmpty
         ? await BlockApi.isBlocked(blockerId: deviceId, otherId: targetId)
         : false;
@@ -88,9 +96,16 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       _local = local;
       _remote = remote;
       _counts = counts;
+      _likesCount = likes;
       _peerBlocked = blocked;
       _loading = false;
     });
+  }
+
+  void _openLikesReceived() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const LikesReceivedScreen()),
+    );
   }
 
   Future<void> _toggleBlock() async {
@@ -487,6 +502,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     avatarUrl: _remote?.avatarUrl,
                     bio: _remote?.bio ?? '',
                     counts: _counts,
+                    likesCount: _likesCount,
                     discoverPhotoUrl: _remote?.discoverPhotoUrl ?? '',
                     viewerMode: _isViewingOther,
                     peerBlocked: _peerBlocked,
@@ -494,6 +510,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onEditBio: _saveBio,
                     onTapFollowers: () => _openFriendsList(FriendDirection.followers),
                     onTapFollowing: () => _openFriendsList(FriendDirection.following),
+                    onTapLikes: _openLikesReceived,
                     onPickDiscoverPhoto: _pickAndUploadDiscoverPhoto,
                     onEdit: _openEditor,
                     onSettings: _openSettings,
@@ -770,11 +787,13 @@ class _IdentitySection extends StatelessWidget {
     required this.avatarUrl,
     required this.bio,
     required this.counts,
+    required this.likesCount,
     required this.discoverPhotoUrl,
     required this.onTapAvatar,
     required this.onEditBio,
     required this.onTapFollowers,
     required this.onTapFollowing,
+    required this.onTapLikes,
     required this.onPickDiscoverPhoto,
     required this.onEdit,
     required this.onSettings,
@@ -789,11 +808,14 @@ class _IdentitySection extends StatelessWidget {
   final String? avatarUrl;
   final String bio;
   final FriendshipCounts counts;
+  /// Number of users who liked me. Only shown on my own profile (private).
+  final int likesCount;
   final String discoverPhotoUrl;
   final VoidCallback onTapAvatar;
   final Future<void> Function(String) onEditBio;
   final VoidCallback onTapFollowers;
   final VoidCallback onTapFollowing;
+  final VoidCallback onTapLikes;
   final VoidCallback onPickDiscoverPhoto;
   final VoidCallback onEdit;
   final VoidCallback onSettings;
@@ -932,8 +954,9 @@ class _IdentitySection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        // Stats row, TikTok-style: posts | followers | following with a
-        // thin vertical divider between each.
+        // Stats row, TikTok-style. On my own profile we add a private
+        // "likes" column between posts and followers — tappable, opens
+        // the "Qui m'a liké" screen. Hidden in viewer mode (private).
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -942,6 +965,14 @@ class _IdentitySection extends StatelessWidget {
               label: 'posts',
             ),
             const _StatDivider(),
+            if (!viewerMode) ...[
+              _InlineStat(
+                value: likesCount,
+                label: 'likes',
+                onTap: onTapLikes,
+              ),
+              const _StatDivider(),
+            ],
             _InlineStat(
               value: counts.followers,
               label: AppStrings.t('profile_followers').toLowerCase(),

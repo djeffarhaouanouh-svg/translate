@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
+import '../services/like_api.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
@@ -26,9 +27,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   static const _profiles = <_DemoProfile>[];
 
   int _topIndex = 0;
-  // IDs of profiles I've liked (heart filled). Local for now — wire to
-  // `likes` table when ready so the recipient can see who liked them.
-  final Set<String> _liked = <String>{};
+  // Profile ids I've already liked — heart renders filled for these.
+  // Hydrated from Supabase on bootstrap so the state survives restarts /
+  // multi-device; mutated optimistically on every tap, written through
+  // LikeApi.like / LikeApi.unlike.
+  Set<String> _likedIds = <String>{};
 
   // Drag state for the top card.
   Offset _drag = Offset.zero;
@@ -81,9 +84,46 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (isSupabaseReady && id.isNotEmpty) {
       try {
         final mine = await FriendshipApi.fetchMine(id);
+        final liked = await LikeApi.fetchMyLikedIds(id);
         if (!mounted) return;
-        setState(() => _myFriendships = mine);
+        setState(() {
+          _myFriendships = mine;
+          _likedIds = liked;
+        });
       } catch (_) {}
+    }
+  }
+
+  /// Toggle a like on [profileId]. Optimistic local flip + DB write
+  /// through LikeApi; on error roll back so the heart matches the truth.
+  Future<void> _toggleLikeOnProfile(String profileId) async {
+    if (_myId.isEmpty || profileId.isEmpty) return;
+    final wasLiked = _likedIds.contains(profileId);
+    setState(() {
+      if (wasLiked) {
+        _likedIds = {..._likedIds}..remove(profileId);
+      } else {
+        _likedIds = {..._likedIds, profileId};
+      }
+    });
+    try {
+      if (wasLiked) {
+        await LikeApi.unlike(likerId: _myId, likedId: profileId);
+      } else {
+        await LikeApi.like(likerId: _myId, likedId: profileId);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (wasLiked) {
+          _likedIds = {..._likedIds, profileId};
+        } else {
+          _likedIds = {..._likedIds}..remove(profileId);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible d\'enregistrer le like.')),
+      );
     }
   }
 
@@ -363,13 +403,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           _advance();
                         },
                         onBack: _topIndex > 0 ? _back : null,
-                        liked: _liked.contains(_profiles[_topIndex].name),
-                        onToggleLike: () {
-                          setState(() {
-                            final n = _profiles[_topIndex].name;
-                            if (!_liked.add(n)) _liked.remove(n);
-                          });
-                        },
+                        liked: _likedIds.contains(_profiles[_topIndex].id),
+                        onToggleLike: () =>
+                            _toggleLikeOnProfile(_profiles[_topIndex].id),
                       ),
                     ),
                   ),
@@ -385,12 +421,15 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
 class _DemoProfile {
   const _DemoProfile({
+    required this.id,
     required this.name,
     required this.age,
     required this.flag,
     required this.bio,
   });
 
+  /// Supabase auth.users id — used as the key for likes / blocks / chat.
+  final String id;
   final String name;
   final int age;
   final String flag;
