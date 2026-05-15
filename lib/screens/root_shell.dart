@@ -7,8 +7,8 @@ import '../services/chat_unread.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import 'chat_screen.dart';
+import 'discover_screen.dart';
 import 'profile_screen.dart';
-import 'search_screen.dart';
 
 /// Floating glass-morphism bottom-nav with a sliding pill that animates
 /// between selected tabs.
@@ -27,7 +27,7 @@ class _RootShellState extends State<RootShell> {
   int _index = _mainIndex;
 
   late final List<Widget> _pages = <Widget>[
-    const SearchScreen(),
+    const DiscoverScreen(),
     ChatScreen(translation: widget.translation),
     const ProfileScreen(),
   ];
@@ -86,8 +86,8 @@ class _GlassNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = <_NavItemData>[
       _NavItemData(
-        icon: Icons.search,
-        selectedIcon: Icons.manage_search,
+        icon: Icons.local_fire_department_outlined,
+        selectedIcon: Icons.local_fire_department,
         label: AppStrings.t('nav_search'),
       ),
       _NavItemData(
