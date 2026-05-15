@@ -426,7 +426,8 @@ class _FriendChatRow extends StatelessWidget {
             IconButton(
               tooltip: 'Appeler',
               onPressed: onCall,
-              icon: const Icon(Icons.phone, color: WhatsAppCallTheme.accent),
+              icon: const Icon(Icons.phone,
+                  color: WhatsAppCallTheme.subtleText),
             ),
             PopupMenuButton<String>(
               tooltip: 'Plus',
