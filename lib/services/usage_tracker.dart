@@ -14,6 +14,17 @@ import 'profile_api.dart';
 /// it by editing the request. If/when that matters, move the decrement
 /// into a Postgres `SECURITY DEFINER` function and call it via RPC.
 abstract final class UsageTracker {
+  /// TEMPORARY: when true, every public method becomes a no-op and the
+  /// reactive notifiers stay at "infinite credits / never exhausted".
+  /// Used to remove the time gate while testing long calls (~1h+) end-
+  /// to-end. Flip back to false and redeploy to re-enable the credit
+  /// system before going to production.
+  static const bool _kDisabled = true;
+
+  /// Public mirror so callers (CallScreen) can also skip their own
+  /// credit gates when tracking is off.
+  static bool get isDisabled => _kDisabled;
+
   /// Flush window. Every [_tickSeconds] we push the accumulated time to
   /// Supabase. Short enough that closing the tab mid-call only loses a few
   /// seconds; long enough that we're not hammering the DB.
@@ -42,6 +53,13 @@ abstract final class UsageTracker {
     required String userId,
     required int initialCredits,
   }) {
+    if (_kDisabled) {
+      // Force "infinite credits" so the call screen never disables
+      // translation and the profile doesn't render an empty bar.
+      creditsRemaining.value = 1 << 30;
+      creditsExhausted.value = false;
+      return;
+    }
     if (userId.isEmpty) return;
     if (_timer != null && _userId == userId) return;
     stop(); // cancel previous if any
@@ -84,6 +102,7 @@ abstract final class UsageTracker {
   /// Stop the periodic timer and flush any partial seconds so we don't
   /// lose what was already used since the last tick.
   static Future<void> stop({int extraSeconds = 0}) async {
+    if (_kDisabled) return;
     _timer?.cancel();
     _timer = null;
     _pendingSeconds += extraSeconds;

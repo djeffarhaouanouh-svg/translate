@@ -132,6 +132,7 @@ class _CallScreenState extends State<CallScreen> {
     final p = await ProfileApi.fetchById(uid);
     if (!mounted || p == null) return;
     UsageTracker.start(userId: uid, initialCredits: p.creditsSeconds);
+    if (UsageTracker.isDisabled) return;
     if (p.creditsSeconds <= 0) {
       // Already empty before the call started — kill translation now.
       await widget.translation.detach();
