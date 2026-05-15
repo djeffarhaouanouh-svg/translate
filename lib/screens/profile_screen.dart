@@ -858,64 +858,56 @@ class _DiscoverPhotoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final has = photoUrl.isNotEmpty;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onPick,
-      child: AspectRatio(
-        aspectRatio: 4 / 5,
-        child: Container(
-          decoration: BoxDecoration(
-            color: WhatsAppCallTheme.bar,
+    // Centred portrait preview — ~160 wide × 200 tall (4:5, the Discover
+    // card aspect). Compact but recognisable as "what your card looks like".
+    return Center(
+      child: SizedBox(
+        width: 160,
+        child: AspectRatio(
+          aspectRatio: 4 / 5,
+          child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: has ? const Color(0xFF2A3942) : WhatsAppCallTheme.accent
-                  .withValues(alpha: 0.45),
-              width: has ? 1 : 1.5,
-              style: has ? BorderStyle.solid : BorderStyle.solid,
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (has)
-                Image.network(
-                  photoUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const _DiscoverPhotoPlaceholder(),
-                )
-              else
-                const _DiscoverPhotoPlaceholder(),
-              if (has)
-                Positioned(
-                  right: 10,
-                  bottom: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.photo_library_outlined,
-                            size: 14, color: Colors.white),
-                        SizedBox(width: 6),
-                        Text(
-                          'Changer',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            onTap: onPick,
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: WhatsAppCallTheme.bar,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: has
+                      ? const Color(0xFF2A3942)
+                      : WhatsAppCallTheme.accent.withValues(alpha: 0.5),
+                  width: has ? 1 : 1.5,
                 ),
-            ],
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (has)
+                    Image.network(
+                      photoUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const _PhotoEmptyState(),
+                    )
+                  else
+                    const _PhotoEmptyState(),
+                  if (has)
+                    Positioned(
+                      right: 8,
+                      bottom: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.edit,
+                            size: 14, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -923,43 +915,24 @@ class _DiscoverPhotoCard extends StatelessWidget {
   }
 }
 
-class _DiscoverPhotoPlaceholder extends StatelessWidget {
-  const _DiscoverPhotoPlaceholder();
+class _PhotoEmptyState extends StatelessWidget {
+  const _PhotoEmptyState();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: WhatsAppCallTheme.scaffold,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: WhatsAppCallTheme.accent.withValues(alpha: 0.5),
-              ),
-            ),
-            child: const Icon(Icons.add_a_photo_outlined,
-                color: WhatsAppCallTheme.accent, size: 26),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Photo de Discover',
+          Icon(Icons.add_a_photo_outlined,
+              color: WhatsAppCallTheme.accent, size: 28),
+          SizedBox(height: 8),
+          Text(
+            'Ajouter',
             style: TextStyle(
               color: WhatsAppCallTheme.strongText,
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Choisis dans ta galerie',
-            style: TextStyle(
-              color: WhatsAppCallTheme.subtleText,
-              fontSize: 12,
             ),
           ),
         ],
