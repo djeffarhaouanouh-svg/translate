@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../screens/call_screen.dart';
 import '../translation/realtime_translation_port.dart';
 import 'device_id.dart';
+import 'profile_api.dart';
+import 'supabase_service.dart';
 import 'token_api.dart';
 import 'user_prefs.dart';
 
@@ -39,19 +41,18 @@ abstract final class CallLauncher {
     required RealtimeTranslationPort translation,
   }) async {
     final myId = await DeviceId.getOrCreate();
-    final profile = await UserPrefs.loadProfile();
-    final myName = profile?.firstName.trim() ?? '';
-    final mySourceLang = profile?.sourceLang.trim() ?? '';
+    final localProfile = await UserPrefs.loadProfile();
+    var myName = localProfile?.firstName.trim() ?? '';
+    var mySourceLang = localProfile?.sourceLang.trim() ?? '';
 
-    if (myName.isEmpty || mySourceLang.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Complète ton profil avant de lancer un appel.'),
-          ),
-        );
+    // Local prefs are empty on first sign-in from a new device — fall back
+    // to the canonical Supabase profile row before giving up.
+    if ((myName.isEmpty || mySourceLang.isEmpty) && isSupabaseReady) {
+      final remote = await ProfileApi.fetchById(myId);
+      if (remote != null) {
+        if (myName.isEmpty) myName = remote.displayName.trim();
+        if (mySourceLang.isEmpty) mySourceLang = remote.language.trim();
       }
-      return false;
     }
 
     try {
