@@ -130,17 +130,41 @@ class _DiscoverHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
-          Text(
+          const Text(
             'Discover',
             style: TextStyle(
               color: WhatsAppCallTheme.strongText,
               fontSize: 26,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: WhatsAppCallTheme.bar,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.tune, size: 16, color: WhatsAppCallTheme.subtleText),
+                SizedBox(width: 6),
+                Text(
+                  'Filtres',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.subtleText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
