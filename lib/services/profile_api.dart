@@ -16,6 +16,7 @@ class RemoteProfile {
     required this.language,
     required this.avatarColor,
     required this.avatarUrl,
+    this.discoverPhotoUrl = '',
     this.bio = '',
     this.isPro = false,
     this.creditsSeconds = freeWeeklyCreditsSeconds,
@@ -30,6 +31,11 @@ class RemoteProfile {
   final String language;
   final String avatarColor;
   final String avatarUrl;
+
+  /// Public URL of the larger photo shown when this profile appears in
+  /// someone else's Discover card stack. Optional — empty falls back to
+  /// [avatarUrl] (or the placeholder beyond that).
+  final String discoverPhotoUrl;
 
   /// Free-form short tagline shown on the user's own profile and on their
   /// Discover card. Capped at [profileBioMaxLength] characters.
@@ -80,6 +86,7 @@ class RemoteProfile {
         language: m['language']?.toString() ?? '',
         avatarColor: m['avatar_color']?.toString() ?? '',
         avatarUrl: m['avatar_url']?.toString() ?? '',
+        discoverPhotoUrl: m['discover_photo_url']?.toString() ?? '',
         bio: m['bio']?.toString() ?? '',
         isPro: m['is_pro'] == true,
         creditsSeconds:
@@ -226,6 +233,42 @@ abstract final class ProfileApi {
     return urlWithBuster;
   }
 
+  /// Upload [bytes] as the user's Discover-card photo. Same `avatars` bucket
+  /// as the avatar (RLS already configured) but stored under a `discover/`
+  /// prefix so the two photos can have different sizes / aspect ratios
+  /// without colliding. Returns the cache-busted public URL.
+  static Future<String> uploadDiscoverPhoto({
+    required String deviceId,
+    required Uint8List bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    if (!isSupabaseReady) {
+      throw StateError('Supabase non configuré');
+    }
+    if (deviceId.isEmpty) throw ArgumentError('deviceId vide');
+    if (bytes.isEmpty) throw ArgumentError('image vide');
+
+    final ext = contentType.endsWith('png') ? 'png' : 'jpg';
+    final path = 'discover/$deviceId.$ext';
+    await _c.storage.from('avatars').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentType,
+            cacheControl: '3600',
+          ),
+        );
+    final baseUrl = _c.storage.from('avatars').getPublicUrl(path);
+    final urlWithBuster =
+        '$baseUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+    await _c.from('profiles').update({
+      'discover_photo_url': urlWithBuster,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', deviceId);
+    return urlWithBuster;
+  }
+
   /// Case-insensitive substring search by display name. Excludes my own profile.
   static Future<List<RemoteProfile>> searchByFirstName({
     required String query,
@@ -292,6 +335,7 @@ abstract final class ProfileApi {
       language: p.language,
       avatarColor: p.avatarColor,
       avatarUrl: p.avatarUrl,
+      discoverPhotoUrl: p.discoverPhotoUrl,
       bio: p.bio,
       isPro: p.isPro,
       creditsSeconds: allotment,

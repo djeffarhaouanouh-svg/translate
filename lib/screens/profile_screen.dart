@@ -268,6 +268,46 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     );
   }
 
+  Future<void> _pickAndUploadDiscoverPhoto() async {
+    if (_deviceId.isEmpty) return;
+    if (!isSupabaseReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Supabase non configuré.')),
+      );
+      return;
+    }
+    final picker = ImagePicker();
+    final XFile? file = await picker.pickImage(
+      source: ImageSource.gallery,
+      // The Discover card is portrait — keep more pixels than the avatar
+      // (1024² → 1600 max edge) so the photo doesn't look soft full-screen.
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 88,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final ext = file.name.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+    try {
+      await ProfileApi.uploadDiscoverPhoto(
+        deviceId: _deviceId,
+        bytes: bytes,
+        contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload échoué : $e'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
+  }
+
   Future<void> _saveBio(String bio) async {
     if (_deviceId.isEmpty) return;
     final saved = await ProfileApi.updateMyBio(userId: _deviceId, bio: bio);
@@ -287,6 +327,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
         language: _remote!.language,
         avatarColor: _remote!.avatarColor,
         avatarUrl: _remote!.avatarUrl,
+        discoverPhotoUrl: _remote!.discoverPhotoUrl,
         bio: saved,
         isPro: _remote!.isPro,
         creditsSeconds: _remote!.creditsSeconds,
@@ -359,6 +400,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                   _BioCard(
                     bio: _remote?.bio ?? '',
                     onSave: _saveBio,
+                  ),
+                  const SizedBox(height: 16),
+                  _DiscoverPhotoCard(
+                    photoUrl: _remote?.discoverPhotoUrl ?? '',
+                    onPick: _pickAndUploadDiscoverPhoto,
                   ),
                   const SizedBox(height: 20),
                   _CreditsCard(
@@ -794,6 +840,128 @@ class _LanguageCard extends StatelessWidget {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Single Discover-card photo. Tap → opens the gallery picker, uploads via
+/// [ProfileApi.uploadDiscoverPhoto] (Supabase storage `avatars/discover/`).
+/// Empty state shows a dashed placeholder with an Add Photo affordance.
+class _DiscoverPhotoCard extends StatelessWidget {
+  const _DiscoverPhotoCard({required this.photoUrl, required this.onPick});
+
+  final String photoUrl;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final has = photoUrl.isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onPick,
+      child: AspectRatio(
+        aspectRatio: 4 / 5,
+        child: Container(
+          decoration: BoxDecoration(
+            color: WhatsAppCallTheme.bar,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: has ? const Color(0xFF2A3942) : WhatsAppCallTheme.accent
+                  .withValues(alpha: 0.45),
+              width: has ? 1 : 1.5,
+              style: has ? BorderStyle.solid : BorderStyle.solid,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (has)
+                Image.network(
+                  photoUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const _DiscoverPhotoPlaceholder(),
+                )
+              else
+                const _DiscoverPhotoPlaceholder(),
+              if (has)
+                Positioned(
+                  right: 10,
+                  bottom: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.photo_library_outlined,
+                            size: 14, color: Colors.white),
+                        SizedBox(width: 6),
+                        Text(
+                          'Changer',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DiscoverPhotoPlaceholder extends StatelessWidget {
+  const _DiscoverPhotoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: WhatsAppCallTheme.scaffold,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: WhatsAppCallTheme.accent.withValues(alpha: 0.5),
+              ),
+            ),
+            child: const Icon(Icons.add_a_photo_outlined,
+                color: WhatsAppCallTheme.accent, size: 26),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Photo de Discover',
+            style: TextStyle(
+              color: WhatsAppCallTheme.strongText,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Choisis dans ta galerie',
+            style: TextStyle(
+              color: WhatsAppCallTheme.subtleText,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
