@@ -1016,70 +1016,106 @@ class _IdentitySection extends StatelessWidget {
               ),
           ],
         ),
-        // Discover photo: shown on my own profile (with upload affordance)
-        // and on someone else's only when they have one set.
-        if (!viewerMode || hasPhoto) ...[
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: 110,
-              child: AspectRatio(
-                aspectRatio: 4 / 5,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: viewerMode ? null : onPickDiscoverPhoto,
-                child: Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: WhatsAppCallTheme.bar,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: hasPhoto
-                          ? const Color(0xFF2A3942)
-                          : WhatsAppCallTheme.accent.withValues(alpha: 0.5),
-                      width: hasPhoto ? 1 : 1.5,
-                    ),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (hasPhoto)
-                        Image.network(
-                          discoverPhotoUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => const Center(
-                            child: Icon(Icons.broken_image_outlined,
-                                color: WhatsAppCallTheme.subtleText),
-                          ),
-                        )
-                      else
-                        const Center(
-                          child: Icon(Icons.add_a_photo_outlined,
-                              color: WhatsAppCallTheme.accent, size: 24),
-                        ),
-                      if (hasPhoto)
-                        Positioned(
-                          right: 6, bottom: 6,
-                          child: Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.55),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.edit,
-                                size: 12, color: Colors.white),
-                          ),
-                        ),
-                    ],
-                  ),
+        const SizedBox(height: 18),
+        // Instagram-style 3-column grid. Slot 0 is the Discover photo
+        // (the only real one for now). Slots 1-2 tease where future
+        // photos will live — tappable on my own profile (opens the
+        // gallery picker), inert when viewing someone else.
+        _PhotosGrid(
+          discoverPhotoUrl: discoverPhotoUrl,
+          viewerMode: viewerMode,
+          onPick: onPickDiscoverPhoto,
+        ),
+      ],
+    );
+  }
+}
+
+class _PhotosGrid extends StatelessWidget {
+  const _PhotosGrid({
+    required this.discoverPhotoUrl,
+    required this.viewerMode,
+    required this.onPick,
+  });
+
+  final String discoverPhotoUrl;
+  final bool viewerMode;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto = discoverPhotoUrl.isNotEmpty;
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 3,
+      mainAxisSpacing: 6,
+      crossAxisSpacing: 6,
+      // Square cells like Instagram's posts grid. Discover photo is
+      // portrait but BoxFit.cover handles the crop.
+      children: [
+        _PhotoCell(
+          photoUrl: hasPhoto ? discoverPhotoUrl : null,
+          viewerMode: viewerMode,
+          onTap: onPick,
+        ),
+        _PhotoCell(
+          photoUrl: null,
+          viewerMode: viewerMode,
+          onTap: onPick,
+        ),
+        _PhotoCell(
+          photoUrl: null,
+          viewerMode: viewerMode,
+          onTap: onPick,
+        ),
+      ],
+    );
+  }
+}
+
+class _PhotoCell extends StatelessWidget {
+  const _PhotoCell({
+    required this.photoUrl,
+    required this.viewerMode,
+    required this.onTap,
+  });
+
+  final String? photoUrl;
+  final bool viewerMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
+    final tappable = !viewerMode;
+    return Material(
+      color: WhatsAppCallTheme.bar,
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: tappable ? onTap : null,
+        child: hasPhoto
+            ? Image.network(
+                photoUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: WhatsAppCallTheme.subtleText),
+                ),
+              )
+            : Center(
+                child: Icon(
+                  tappable
+                      ? Icons.add_a_photo_outlined
+                      : Icons.image_not_supported_outlined,
+                  color: tappable
+                      ? WhatsAppCallTheme.accent
+                      : WhatsAppCallTheme.subtleText,
+                  size: 22,
                 ),
               ),
-            ),
-          ),
-        ),
-        ],
-      ],
+      ),
     );
   }
 }
