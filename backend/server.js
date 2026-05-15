@@ -256,6 +256,10 @@ app.post('/translation/realtime/session', async (req, res) => {
 
     const sessionPayload = {
       model: 'gpt-realtime-translate',
+      // OpenAI default ephemeral TTL is 60s — too short for any kind of
+      // long-running call. Bump to 30 minutes so refreshes are infrequent
+      // and a single missed refresh doesn't kill the call.
+      expires_after: { anchor: 'created_at', seconds: 1800 },
       audio: {
         ...(Object.keys(audioInput).length > 0 ? { input: audioInput } : {}),
         output: { language: tag },

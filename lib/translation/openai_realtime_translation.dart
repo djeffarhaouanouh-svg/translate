@@ -114,6 +114,11 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     } else {
       delay = const Duration(seconds: 35);
     }
+    debugPrint(
+      '[xlate] schedule next refresh in ${delay.inSeconds}s '
+      '(session expires_at=${at?.toIso8601String() ?? "?"} '
+      'now=${now.toIso8601String()})',
+    );
     _scheduleNextRefreshRaw(delay);
   }
 
@@ -216,6 +221,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   }
 
   void _onPcConnectionState(RTCPeerConnectionState state) {
+    debugPrint('[xlate] pc state → $state');
     final nowConnected = state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
     if (nowConnected && !_wasPcConnected && !kIsWeb) {
       HapticFeedback.lightImpact();
@@ -232,6 +238,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         return;
       }
       _lastConnectionDropSchedule = now;
+      debugPrint('[xlate] pc drop → schedule refresh in 2s');
       _scheduleNextRefreshRaw(const Duration(seconds: 2));
     }
   }
@@ -425,9 +432,15 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   }
 
   Future<void> _refreshLoop() async {
+    debugPrint('[xlate] refresh fire — room=${_room != null} '
+        'route=${_route?.isConfigured ?? false} busy=$_busy');
     _refreshTimer = null;
-    if (_room == null || _route == null || !_route!.isConfigured) return;
+    if (_room == null || _route == null || !_route!.isConfigured) {
+      debugPrint('[xlate] refresh ABORT — room/route gone');
+      return;
+    }
     if (_busy) {
+      debugPrint('[xlate] refresh defer — busy, retry 3s');
       _scheduleNextRefreshRaw(const Duration(seconds: 3));
       return;
     }
@@ -435,6 +448,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final remote = _resolveRemoteAudio() ?? _cachedRemote;
     final sid = _boundPublicationSid;
     if (remote == null || sid == null) {
+      debugPrint('[xlate] refresh defer — no remote ($remote) or sid ($sid), retry 4s');
       _scheduleNextRefreshRaw(const Duration(seconds: 4));
       return;
     }
@@ -444,11 +458,13 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
     _busy = true;
     try {
+      debugPrint('[xlate] refresh START — opening new pipeline');
       await _stopMedia();
       if (!identical(_room, roomRef)) return;
       await _openPipelineCore(remote, sid, roomRef);
+      debugPrint('[xlate] refresh OK — new pipeline opened');
     } catch (e, st) {
-      debugPrint('OpenAi translation refresh: $e\n$st');
+      debugPrint('[xlate] refresh FAILED: $e\n$st');
       await _stopMedia();
       _scheduleNextRefreshRaw(const Duration(seconds: 6));
     } finally {
