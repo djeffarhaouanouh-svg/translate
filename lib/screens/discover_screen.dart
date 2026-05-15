@@ -93,30 +93,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                 ),
               ),
-          // Top card — Dismissible handles the swipe. Positioned.fill so it
-          // covers the same area as the background cards (otherwise it'd size
-          // to its child's intrinsic, which is undefined for our expanded card).
+          // Top card — no swipe. Use the Ajouter / heart buttons to advance.
           Positioned.fill(
-            child: Dismissible(
-              key: ValueKey(_topIndex),
-              direction: DismissDirection.horizontal,
-              dismissThresholds: const {
-                DismissDirection.horizontal: 0.25,
-                DismissDirection.startToEnd: 0.25,
-                DismissDirection.endToStart: 0.25,
-              },
-              onDismissed: (dir) {
-                if (dir == DismissDirection.startToEnd) {
-                  _liked.add(_profiles[_topIndex].name);
-                }
+            child: _ProfileCard(
+              profile: _profiles[_topIndex],
+              liked: _liked.contains(_profiles[_topIndex].name),
+              onAdd: () {
+                _addFriend(_profiles[_topIndex].name);
                 _advance();
               },
-              child: _ProfileCard(
-                profile: _profiles[_topIndex],
-                liked: _liked.contains(_profiles[_topIndex].name),
-                onAdd: () => _addFriend(_profiles[_topIndex].name),
-                onToggleLike: () => _toggleLike(_profiles[_topIndex].name),
-              ),
+              onToggleLike: () => _toggleLike(_profiles[_topIndex].name),
             ),
           ),
         ],
