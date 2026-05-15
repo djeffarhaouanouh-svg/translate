@@ -326,6 +326,24 @@ abstract final class ProfileApi {
     }
   }
 
+  /// Permanently remove the caller's profile row and any friendships they
+  /// participate in. The Supabase auth.users record is **not** deleted —
+  /// that requires a server-side admin call. Calling code should sign the
+  /// user out right after; the next sign-in will route them through
+  /// onboarding because their profile row is gone.
+  static Future<void> deleteMyProfile(String userId) async {
+    if (!isSupabaseReady || userId.isEmpty) return;
+    try {
+      await _c
+          .from('friendships')
+          .delete()
+          .or('requester.eq.$userId,addressee.eq.$userId');
+    } catch (e) {
+      debugPrint('ProfileApi.deleteMyProfile: friendships cleanup failed: $e');
+    }
+    await _c.from('profiles').delete().eq('id', userId);
+  }
+
   /// Activate (or extend) Premium for [userId]. Stamps `pro_expires_at` 7
   /// days out, flips `is_pro` true, refills credits to the Pro allotment.
   ///

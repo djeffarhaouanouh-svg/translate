@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/app_strings.dart';
-import '../services/auth_service.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
@@ -13,6 +12,7 @@ import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 import 'friends_list_screen.dart';
 import 'onboarding_screen.dart';
+import 'settings_screen.dart';
 
 /// Onglet 3 — synchronized with the user's own Supabase `profiles` row plus
 /// live follower / following counts pulled from `friendships`. Falls back to
@@ -148,10 +148,6 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     return '@${_deviceId.replaceAll('-', '').substring(0, 8)}';
   }
 
-  /// Email comes from Supabase Auth (`auth.users.email`), never from the
-  /// public `profiles` table — that's how we keep it private from other users.
-  String get _email => AuthService.currentEmail;
-
   Future<void> _upgradeToPremium() async {
     // For now this just opens a confirmation sheet describing the offer.
     // The actual IAP / receipt-validation hook will go here once App Store /
@@ -272,44 +268,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     );
   }
 
-  Future<void> _signOut() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WhatsAppCallTheme.bar,
-        title: Text(
-          AppStrings.t('profile_signout_confirm_title'),
-          style: const TextStyle(color: WhatsAppCallTheme.strongText),
-        ),
-        content: Text(
-          AppStrings.t('profile_signout_confirm_body'),
-          style: const TextStyle(color: WhatsAppCallTheme.subtleText),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppStrings.t('cancel')),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE53935),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(AppStrings.t('profile_signout')),
-          ),
-        ],
-      ),
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
-    if (ok != true) return;
-    try {
-      await AuthService.signOut();
-      // Parent (`LiveKitTranslateApp`) listens for auth state changes and
-      // routes us back to the login screen automatically.
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
-    }
+    // Profile data may have changed (e.g. account deleted → ignored;
+    // sign-out → routed away by the auth listener).
+    if (mounted) await _reload();
   }
 
   @override
@@ -355,22 +320,18 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     avatarUrl: _remote?.avatarUrl,
                     onTapAvatar: _pickAndUploadAvatar,
                   ),
-                  if (_email.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    _EmailCard(email: _email),
-                  ],
+                  const SizedBox(height: 20),
+                  _StatsRow(
+                    counts: _counts,
+                    onTapFollowers: () => _openFriendsList(FriendDirection.followers),
+                    onTapFollowing: () => _openFriendsList(FriendDirection.following),
+                  ),
                   const SizedBox(height: 20),
                   _CreditsCard(
                     profile: _remote,
                     onUpgrade: _remote != null && !_remote!.isPro
                         ? _upgradeToPremium
                         : null,
-                  ),
-                  const SizedBox(height: 24),
-                  _StatsRow(
-                    counts: _counts,
-                    onTapFollowers: () => _openFriendsList(FriendDirection.followers),
-                    onTapFollowing: () => _openFriendsList(FriendDirection.following),
                   ),
                   const SizedBox(height: 24),
                   _LanguageCard(language: lang),
@@ -387,11 +348,12 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: _signOut,
-                    icon: const Icon(Icons.logout, color: Color(0xFFE53935)),
-                    label: Text(
-                      AppStrings.t('profile_signout'),
-                      style: const TextStyle(color: Color(0xFFE53935)),
+                    onPressed: _openSettings,
+                    icon: const Icon(Icons.settings_outlined,
+                        color: WhatsAppCallTheme.subtleText),
+                    label: const Text(
+                      'Paramètres',
+                      style: TextStyle(color: WhatsAppCallTheme.subtleText),
                     ),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Color(0xFF2A3942)),
@@ -566,63 +528,6 @@ class _StatCell extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _EmailCard extends StatelessWidget {
-  const _EmailCard({required this.email});
-  final String email;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: WhatsAppCallTheme.bar,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A3942)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Row(
-        children: [
-          const Icon(Icons.alternate_email,
-              color: WhatsAppCallTheme.accent, size: 22),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  email,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: WhatsAppCallTheme.strongText,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(Icons.lock_outline,
-                        color: WhatsAppCallTheme.subtleText, size: 12),
-                    const SizedBox(width: 4),
-                    Text(
-                      AppStrings.t('profile_email_private'),
-                      style: const TextStyle(
-                        color: WhatsAppCallTheme.subtleText,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
