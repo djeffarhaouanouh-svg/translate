@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/app_strings.dart';
+import '../services/block_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
@@ -14,11 +15,20 @@ import 'friends_list_screen.dart';
 import 'onboarding_screen.dart';
 import 'settings_screen.dart';
 
-/// Onglet 3 — synchronized with the user's own Supabase `profiles` row plus
-/// live follower / following counts pulled from `friendships`. Falls back to
-/// the locally-stored profile (UserPrefs) when Supabase is offline.
+/// Profile view. Two modes:
+///
+///   * `userId` is null (default): "my own" profile — editable, shows the
+///     Free Account / Premium card, Edit + Paramètres buttons.
+///   * `userId` is set: another user's profile, viewed read-only. Camera /
+///     edit affordances are hidden, premium card and the call-language
+///     warning are dropped (private to me), and the action row becomes
+///     Bloquer / Débloquer instead of Edit / Paramètres.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.userId});
+
+  /// When non-null, render the profile of the given Supabase auth user id
+  /// in read-only "viewer" mode rather than my own profile.
+  final String? userId;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -30,6 +40,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   ProfileSnapshot? _local;
   FriendshipCounts _counts = const FriendshipCounts(followers: 0, following: 0);
   bool _loading = true;
+  // Viewer-mode only: am I currently blocking the displayed user?
+  bool _peerBlocked = false;
+
+  bool get _isViewingOther => widget.userId != null;
+  String get _targetId => widget.userId ?? _deviceId;
 
   @override
   void initState() {
@@ -55,19 +70,78 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     if (!mounted) return;
     setState(() => _loading = true);
     final deviceId = await DeviceId.getOrCreate();
-    final local = await UserPrefs.loadProfile();
-    final remote = isSupabaseReady ? await ProfileApi.fetchById(deviceId) : null;
+    final targetId = widget.userId ?? deviceId;
+    // Local prefs only matter for my own profile (offline fallback). When
+    // viewing someone else there's no local cache to consult.
+    final local = _isViewingOther ? null : await UserPrefs.loadProfile();
+    final remote =
+        isSupabaseReady ? await ProfileApi.fetchById(targetId) : null;
     final counts = isSupabaseReady
-        ? await FriendshipApi.countsFor(deviceId)
+        ? await FriendshipApi.countsFor(targetId)
         : const FriendshipCounts(followers: 0, following: 0);
+    final blocked = _isViewingOther && isSupabaseReady && deviceId.isNotEmpty
+        ? await BlockApi.isBlocked(blockerId: deviceId, otherId: targetId)
+        : false;
     if (!mounted) return;
     setState(() {
       _deviceId = deviceId;
       _local = local;
       _remote = remote;
       _counts = counts;
+      _peerBlocked = blocked;
       _loading = false;
     });
+  }
+
+  Future<void> _toggleBlock() async {
+    if (_targetId.isEmpty || _deviceId.isEmpty) return;
+    final wasBlocked = _peerBlocked;
+    final name = _displayName.isEmpty ? 'cette personne' : _displayName;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WhatsAppCallTheme.bar,
+        title: Text(
+          wasBlocked ? 'Débloquer $name ?' : 'Bloquer $name ?',
+          style: const TextStyle(color: WhatsAppCallTheme.strongText),
+        ),
+        content: Text(
+          wasBlocked
+              ? 'Cette personne pourra à nouveau te trouver, te contacter et voir tes messages.'
+              : 'Cette personne ne pourra plus te trouver, te contacter ni t\'appeler. Tu peux annuler depuis Paramètres → Bloqués.',
+          style: const TextStyle(color: WhatsAppCallTheme.subtleText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: wasBlocked
+                  ? WhatsAppCallTheme.accent
+                  : const Color(0xFFE53935),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(wasBlocked ? 'Débloquer' : 'Bloquer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      if (wasBlocked) {
+        await BlockApi.unblock(blockerId: _deviceId, blockedId: _targetId);
+      } else {
+        await BlockApi.block(blockerId: _deviceId, blockedId: _targetId);
+      }
+      if (!mounted) return;
+      setState(() => _peerBlocked = !wasBlocked);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+    }
   }
 
   Future<void> _openFriendsList(FriendDirection direction) async {
@@ -352,6 +426,21 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final lang = findLanguageByCode(_languageCode);
     return Scaffold(
       backgroundColor: WhatsAppCallTheme.scaffold,
+      // AppBar only when pushed as a route to view someone else — gives a
+      // back button. The "my profile" tab is mounted in IndexedStack, no
+      // back navigation, so no AppBar needed.
+      appBar: _isViewingOther
+          ? AppBar(
+              backgroundColor: WhatsAppCallTheme.scaffold,
+              foregroundColor: WhatsAppCallTheme.strongText,
+              elevation: 0,
+              title: Text(
+                _displayName.isEmpty ? 'Profil' : _displayName,
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
@@ -399,6 +488,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     bio: _remote?.bio ?? '',
                     counts: _counts,
                     discoverPhotoUrl: _remote?.discoverPhotoUrl ?? '',
+                    viewerMode: _isViewingOther,
+                    peerBlocked: _peerBlocked,
                     onTapAvatar: _pickAndUploadAvatar,
                     onEditBio: _saveBio,
                     onTapFollowers: () => _openFriendsList(FriendDirection.followers),
@@ -406,16 +497,22 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onPickDiscoverPhoto: _pickAndUploadDiscoverPhoto,
                     onEdit: _openEditor,
                     onSettings: _openSettings,
+                    onToggleBlock: _toggleBlock,
                   ),
                   const SizedBox(height: 20),
-                  _LanguageCard(language: lang),
-                  const SizedBox(height: 16),
-                  _CreditsCard(
-                    profile: _remote,
-                    onUpgrade: _remote != null && !_remote!.isPro
-                        ? _upgradeToPremium
-                        : null,
+                  _LanguageCard(
+                    language: lang,
+                    showCallWarning: !_isViewingOther,
                   ),
+                  if (!_isViewingOther) ...[
+                    const SizedBox(height: 16),
+                    _CreditsCard(
+                      profile: _remote,
+                      onUpgrade: _remote != null && !_remote!.isPro
+                          ? _upgradeToPremium
+                          : null,
+                    ),
+                  ],
                 ],
               ),
         ),
@@ -588,8 +685,11 @@ class _StatCellInline extends StatelessWidget {
 }
 
 class _LanguageCard extends StatelessWidget {
-  const _LanguageCard({required this.language});
+  const _LanguageCard({required this.language, this.showCallWarning = true});
   final AppLanguage? language;
+  /// The "during calls you have to speak only X" hint only makes sense on
+  /// my own profile — not when peeking at someone else's.
+  final bool showCallWarning;
 
   @override
   Widget build(BuildContext context) {
@@ -597,7 +697,7 @@ class _LanguageCard extends StatelessWidget {
     final label = language != null
         ? AppStrings.t('profile_speaks', args: {'lang': language!.label})
         : AppStrings.t('profile_no_language');
-    final warning = language != null
+    final warning = (showCallWarning && language != null)
         ? AppStrings.t('profile_call_language_warning',
             args: {'lang': language!.label})
         : null;
@@ -678,6 +778,9 @@ class _IdentitySection extends StatelessWidget {
     required this.onPickDiscoverPhoto,
     required this.onEdit,
     required this.onSettings,
+    this.viewerMode = false,
+    this.peerBlocked = false,
+    this.onToggleBlock,
   });
 
   final String displayName;
@@ -694,6 +797,12 @@ class _IdentitySection extends StatelessWidget {
   final VoidCallback onPickDiscoverPhoto;
   final VoidCallback onEdit;
   final VoidCallback onSettings;
+  /// True when this section is rendering someone else's profile read-only.
+  /// Hides the camera badge, the bio edit affordance, the discover-photo
+  /// upload affordance, and swaps Edit/Paramètres for Bloquer.
+  final bool viewerMode;
+  final bool peerBlocked;
+  final VoidCallback? onToggleBlock;
 
   static const _bioPlaceholder = 'Présente-toi en 2 mots ✏️';
 
@@ -782,20 +891,21 @@ class _IdentitySection extends StatelessWidget {
                   avatarColorHex: avatarColorHex,
                   size: 84,
                   fontSize: 36,
-                  onTap: onTapAvatar,
+                  onTap: viewerMode ? null : onTapAvatar,
                 ),
-                Container(
-                  width: 26, height: 26,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: WhatsAppCallTheme.accent,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: WhatsAppCallTheme.scaffold, width: 2),
+                if (!viewerMode)
+                  Container(
+                    width: 26, height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: WhatsAppCallTheme.accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: WhatsAppCallTheme.scaffold, width: 2),
+                    ),
+                    child: const Icon(Icons.camera_alt,
+                        size: 14, color: Colors.white),
                   ),
-                  child: const Icon(Icons.camera_alt,
-                      size: 14, color: Colors.white),
-                ),
               ],
             ),
             const SizedBox(width: 24),
@@ -840,60 +950,85 @@ class _IdentitySection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        // Bio inline — italic placeholder when empty, normal text when set.
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => _openBioEditor(context),
-          child: Padding(
+        // Bio: tap-to-edit on my own profile; flat read-only text when
+        // viewing someone else. Skip rendering an empty bio in viewer mode
+        // (showing "Présente-toi" makes no sense for a third person).
+        if (!viewerMode)
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => _openBioEditor(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                emptyBio ? _bioPlaceholder : bio,
+                style: TextStyle(
+                  color: emptyBio
+                      ? WhatsAppCallTheme.subtleText
+                      : WhatsAppCallTheme.strongText,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontStyle: emptyBio ? FontStyle.italic : FontStyle.normal,
+                ),
+              ),
+            ),
+          )
+        else if (!emptyBio)
+          Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              emptyBio ? _bioPlaceholder : bio,
-              style: TextStyle(
-                color: emptyBio
-                    ? WhatsAppCallTheme.subtleText
-                    : WhatsAppCallTheme.strongText,
+              bio,
+              style: const TextStyle(
+                color: WhatsAppCallTheme.strongText,
                 fontSize: 14,
                 height: 1.4,
-                fontStyle: emptyBio ? FontStyle.italic : FontStyle.normal,
               ),
             ),
           ),
-        ),
         const SizedBox(height: 14),
-        // Action buttons row — Edit + Settings inline, like Insta's Edit
-        // profile + Share profile pair.
+        // Action buttons row — Edit + Settings on my profile, Bloquer /
+        // Débloquer on someone else's.
         Row(
           children: [
-            Expanded(
-              child: _PillButton(
-                icon: Icons.edit_outlined,
-                label: AppStrings.t('profile_edit'),
-                onTap: onEdit,
+            if (!viewerMode) ...[
+              Expanded(
+                child: _PillButton(
+                  icon: Icons.edit_outlined,
+                  label: AppStrings.t('profile_edit'),
+                  onTap: onEdit,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _PillButton(
-                icon: Icons.settings_outlined,
-                label: 'Paramètres',
-                onTap: onSettings,
+              const SizedBox(width: 8),
+              Expanded(
+                child: _PillButton(
+                  icon: Icons.settings_outlined,
+                  label: 'Paramètres',
+                  onTap: onSettings,
+                ),
               ),
-            ),
+            ] else
+              Expanded(
+                child: _PillButton(
+                  icon: peerBlocked ? Icons.lock_open : Icons.block,
+                  label: peerBlocked ? 'Débloquer' : 'Bloquer',
+                  onTap: onToggleBlock ?? () {},
+                  destructive: !peerBlocked,
+                ),
+              ),
           ],
         ),
-        const SizedBox(height: 16),
-        // Discover photo preview — small portrait tile aligned left so it
-        // reads as a "your card looks like this" thumbnail, not a separate
-        // section. Tap → gallery picker.
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: 110,
-            child: AspectRatio(
-              aspectRatio: 4 / 5,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: onPickDiscoverPhoto,
+        // Discover photo: shown on my own profile (with upload affordance)
+        // and on someone else's only when they have one set.
+        if (!viewerMode || hasPhoto) ...[
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 110,
+              child: AspectRatio(
+                aspectRatio: 4 / 5,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: viewerMode ? null : onPickDiscoverPhoto,
                 child: Container(
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
@@ -943,6 +1078,7 @@ class _IdentitySection extends StatelessWidget {
             ),
           ),
         ),
+        ],
       ],
     );
   }
@@ -997,14 +1133,21 @@ class _PillButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.destructive = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  /// When true, renders the label/icon in red — used for the "Bloquer"
+  /// state of the viewer-mode action button.
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
+    final fg = destructive
+        ? const Color(0xFFE53935)
+        : WhatsAppCallTheme.strongText;
     return Material(
       color: WhatsAppCallTheme.bar,
       borderRadius: BorderRadius.circular(10),
@@ -1015,18 +1158,21 @@ class _PillButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFF2A3942)),
+            border: Border.all(
+                color: destructive
+                    ? fg.withValues(alpha: 0.35)
+                    : const Color(0xFF2A3942)),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: WhatsAppCallTheme.strongText),
+              Icon(icon, size: 16, color: fg),
               const SizedBox(width: 8),
               Text(
                 label,
-                style: const TextStyle(
-                  color: WhatsAppCallTheme.strongText,
+                style: TextStyle(
+                  color: fg,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),

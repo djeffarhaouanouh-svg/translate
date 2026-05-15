@@ -11,6 +11,7 @@ import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
 import 'chat_thread_screen.dart';
+import 'profile_screen.dart';
 
 /// WhatsApp-style chat home: lists every accepted friend (union of followers
 /// + following). Tapping a row opens the direct-message thread; the trailing
@@ -156,13 +157,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _viewProfile(RemoteProfile peer) {
-    // No standalone "other user profile" screen yet — placeholder until that
-    // view ships. Keeps the menu real so users see the option exists.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Profil de ${peer.displayName} — bientôt disponible'),
-        backgroundColor: WhatsAppCallTheme.bar,
-        duration: const Duration(seconds: 2),
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileScreen(userId: peer.id),
       ),
     );
   }

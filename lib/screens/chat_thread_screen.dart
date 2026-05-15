@@ -13,6 +13,7 @@ import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
+import 'profile_screen.dart';
 
 /// One-to-one chat thread for [conversationId]. Title is the human-friendly
 /// name shown in the header. The header phone icon dials the peer directly
@@ -284,6 +285,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           peerDeviceId: widget.peerDeviceId,
           translation: widget.translation,
         ),
+        onViewProfile: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => ProfileScreen(userId: widget.peerDeviceId),
+          ),
+        ),
         peerBlocked: _peerBlocked,
         onToggleBlock: _toggleBlockPeer,
       ),
@@ -344,12 +350,14 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     required this.peer,
     required this.onCall,
+    required this.onViewProfile,
     required this.peerBlocked,
     required this.onToggleBlock,
   });
   final String title;
   final RemoteProfile? peer;
   final VoidCallback onCall;
+  final VoidCallback onViewProfile;
   final bool peerBlocked;
   final VoidCallback onToggleBlock;
 
@@ -360,24 +368,28 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     return AppBar(
       titleSpacing: 0,
-      title: Row(
-        children: [
-          ProfileAvatar(
-            displayName: title,
-            avatarUrl: peer?.avatarUrl,
-            avatarColorHex: peer?.avatarColor,
-            size: 36,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      title: InkWell(
+        onTap: onViewProfile,
+        child: Row(
+          children: [
+            ProfileAvatar(
+              displayName: title,
+              avatarUrl: peer?.avatarUrl,
+              avatarColorHex: peer?.avatarColor,
+              size: 36,
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         IconButton(
