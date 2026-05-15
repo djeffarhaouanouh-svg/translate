@@ -383,7 +383,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 // plus the device's bottom safe-area inset, otherwise the last
                 // card gets occluded.
                 padding: EdgeInsets.fromLTRB(
-                  20, 20, 20,
+                  28, 20, 28,
                   32 + 64 + MediaQuery.paddingOf(context).bottom,
                 ),
                 children: [
