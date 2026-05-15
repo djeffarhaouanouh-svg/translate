@@ -148,6 +148,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _springBack();
   }
 
+  /// Debug-only: tap the card to force-advance. Lets us confirm that the
+  /// index/render pipeline works even when gesture detection is broken.
+  void _debugAdvance() {
+    if (_topIndex >= _demoProfiles.length) return;
+    setState(() => _topIndex += 1);
+  }
+
   void _flyOff(int direction) {
     final w = _screenWidth;
     _animFrom = _drag;
@@ -215,21 +222,27 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   }
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    // Listener (raw pointer events) instead of GestureDetector
-                    // so InkWells inside the cards can't steal the drag from
-                    // the gesture arena.
+                    // Two layers wrapping the same Stack:
+                    //   - Listener catches raw pointer events (works on web mouse
+                    //     even when the gesture arena is contested).
+                    //   - GestureDetector is a fallback for native pan gestures.
+                    // Whichever fires first wins; both write to the same _drag.
                     child: Listener(
                       behavior: HitTestBehavior.opaque,
                       onPointerDown: _onPointerDown,
                       onPointerMove: _onPointerMove,
                       onPointerUp: _onPointerUp,
                       onPointerCancel: _onPointerCancel,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          for (int i = math.min(2, _remaining - 1); i >= 0; i--)
-                            _buildCardAt(i),
-                        ],
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _debugAdvance,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            for (int i = math.min(2, _remaining - 1); i >= 0; i--)
+                              _buildCardAt(i),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -389,10 +402,14 @@ class _ProfileCard extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // Solid base color so the card is opaque even when the asset image
+          // is missing (web build doesn't bundle assets/ yet).
+          ColoredBox(color: WhatsAppCallTheme.bar),
           Image.asset(
             'assets/demo_profile.png',
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
           // Bottom gradient for legibility of the name/bio overlay.
           Positioned.fill(
