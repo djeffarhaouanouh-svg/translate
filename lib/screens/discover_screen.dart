@@ -419,7 +419,7 @@ class _DiscoverHeader extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: WhatsAppCallTheme.bar,
                 borderRadius: BorderRadius.circular(999),
@@ -429,8 +429,8 @@ class _DiscoverHeader extends StatelessWidget {
                 mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
                 children: [
                   const Icon(Icons.search,
-                      size: 18, color: WhatsAppCallTheme.subtleText),
-                  const SizedBox(width: 8),
+                      size: 16, color: WhatsAppCallTheme.subtleText),
+                  const SizedBox(width: 6),
                   if (expanded)
                     Expanded(
                       child: TextField(
@@ -441,7 +441,7 @@ class _DiscoverHeader extends StatelessWidget {
                         cursorColor: WhatsAppCallTheme.accent,
                         style: const TextStyle(
                           color: WhatsAppCallTheme.strongText,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                         decoration: const InputDecoration(
                           isDense: true,
@@ -451,7 +451,7 @@ class _DiscoverHeader extends StatelessWidget {
                             fontSize: 13,
                           ),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ),
                     )
@@ -459,15 +459,12 @@ class _DiscoverHeader extends StatelessWidget {
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: onTapPill,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 6),
-                        child: Text(
-                          'Chercher',
-                          style: TextStyle(
-                            color: WhatsAppCallTheme.subtleText,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
+                      child: const Text(
+                        'Chercher',
+                        style: TextStyle(
+                          color: WhatsAppCallTheme.subtleText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -476,9 +473,9 @@ class _DiscoverHeader extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onSubmittedClose,
                       child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        padding: EdgeInsets.only(left: 4),
                         child: Icon(Icons.close,
-                            size: 18, color: WhatsAppCallTheme.subtleText),
+                            size: 16, color: WhatsAppCallTheme.subtleText),
                       ),
                     ),
                 ],
