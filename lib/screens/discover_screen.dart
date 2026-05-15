@@ -26,6 +26,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   static const _profiles = <_DemoProfile>[];
 
   int _topIndex = 0;
+  // IDs of profiles I've liked (heart filled). Local for now — wire to
+  // `likes` table when ready so the recipient can see who liked them.
+  final Set<String> _liked = <String>{};
 
   // Drag state for the top card.
   Offset _drag = Offset.zero;
@@ -360,6 +363,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           _advance();
                         },
                         onBack: _topIndex > 0 ? _back : null,
+                        liked: _liked.contains(_profiles[_topIndex].name),
+                        onToggleLike: () {
+                          setState(() {
+                            final n = _profiles[_topIndex].name;
+                            if (!_liked.add(n)) _liked.remove(n);
+                          });
+                        },
                       ),
                     ),
                   ),
@@ -715,6 +725,8 @@ class _ProfileCard extends StatelessWidget {
     required this.profile,
     required this.onAdd,
     this.onBack,
+    this.liked = false,
+    this.onToggleLike,
   });
 
   final _DemoProfile profile;
@@ -722,6 +734,10 @@ class _ProfileCard extends StatelessWidget {
   /// When non-null, a circular back arrow is rendered at the top-left of the
   /// card. Tapping it returns to the previous profile.
   final VoidCallback? onBack;
+  final bool liked;
+  /// When non-null, a heart button is rendered to the right of "Envoyer 👋".
+  /// Tap toggles liked state.
+  final VoidCallback? onToggleLike;
 
   @override
   Widget build(BuildContext context) {
@@ -814,14 +830,53 @@ class _ProfileCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: _AddButton(onTap: onAdd),
+                Row(
+                  children: [
+                    _AddButton(onTap: onAdd),
+                    if (onToggleLike != null) ...[
+                      const Spacer(),
+                      _LikeHeart(liked: liked, onTap: onToggleLike!),
+                    ],
+                  ],
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LikeHeart extends StatelessWidget {
+  const _LikeHeart({required this.liked, required this.onTap});
+  final bool liked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFFF3B5C);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: 48, height: 48,
+        decoration: BoxDecoration(
+          color: liked
+              ? red.withValues(alpha: 0.18)
+              : Colors.black.withValues(alpha: 0.35),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: liked ? red : Colors.white.withValues(alpha: 0.20),
+            width: liked ? 2 : 1,
+          ),
+        ),
+        child: Icon(
+          liked ? Icons.favorite : Icons.favorite_border,
+          size: liked ? 26 : 22,
+          color: liked ? red : Colors.white,
+        ),
       ),
     );
   }
