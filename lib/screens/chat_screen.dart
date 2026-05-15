@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../services/block_api.dart';
-import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
@@ -156,14 +155,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _reload();
   }
 
-  void _callPeer(RemoteProfile peer) {
-    CallLauncher.startCall(
-      context,
-      peerDeviceId: peer.id,
-      translation: widget.translation,
-    );
-  }
-
   void _viewProfile(RemoteProfile peer) {
     // No standalone "other user profile" screen yet — placeholder until that
     // view ships. Keeps the menu real so users see the option exists.
@@ -285,7 +276,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             lastMessage: last,
             isMine: last?.senderId == _myId,
             onTap: () => _openThread(p),
-            onCall: () => _callPeer(p),
             onViewProfile: () => _viewProfile(p),
             onBlock: () => _blockPeer(p),
           );
@@ -301,7 +291,6 @@ class _FriendChatRow extends StatelessWidget {
     required this.lastMessage,
     required this.isMine,
     required this.onTap,
-    required this.onCall,
     required this.onViewProfile,
     required this.onBlock,
   });
@@ -309,7 +298,6 @@ class _FriendChatRow extends StatelessWidget {
   final ChatMessage? lastMessage;
   final bool isMine;
   final VoidCallback onTap;
-  final VoidCallback onCall;
   final VoidCallback onViewProfile;
   final VoidCallback onBlock;
 
@@ -423,11 +411,13 @@ class _FriendChatRow extends StatelessWidget {
               ),
             ),
             // Trailing actions: quick call + 3-dot menu (Voir profil / Bloquer).
-            IconButton(
-              tooltip: 'Appeler',
-              onPressed: onCall,
-              icon: const Icon(Icons.phone,
-                  color: WhatsAppCallTheme.subtleText),
+            // Decorative phone glyph — not interactive. Tap on the row still
+            // opens the thread; the phone here just signals "you can call
+            // this person from inside".
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.phone,
+                  color: WhatsAppCallTheme.subtleText, size: 20),
             ),
             PopupMenuButton<String>(
               tooltip: 'Plus',
