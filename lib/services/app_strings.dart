@@ -60,6 +60,7 @@ abstract final class AppStrings {
     'profile_title': 'Profil',
     'profile_followers': 'Abonnés',
     'profile_following': 'Abonnements',
+    'profile_bio_placeholder': 'Présente-toi en 2 mots ✏️',
     'profile_speaks': 'Parle {lang}',
     'profile_no_language': 'Aucune langue',
     'profile_call_language_warning':
@@ -161,6 +162,7 @@ abstract final class AppStrings {
     'profile_title': 'Profile',
     'profile_followers': 'Followers',
     'profile_following': 'Following',
+    'profile_bio_placeholder': 'Tell us about yourself in 2 words ✏️',
     'profile_speaks': 'Speaks {lang}',
     'profile_no_language': 'No language',
     'profile_call_language_warning':
@@ -260,6 +262,7 @@ abstract final class AppStrings {
     'profile_title': 'Perfil',
     'profile_followers': 'Seguidores',
     'profile_following': 'Siguiendo',
+    'profile_bio_placeholder': 'Preséntate en 2 palabras ✏️',
     'profile_speaks': 'Habla {lang}',
     'profile_no_language': 'Sin idioma',
     'profile_call_language_warning':

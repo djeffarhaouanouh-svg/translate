@@ -912,7 +912,10 @@ class _IdentitySection extends StatelessWidget {
   final bool iLikePeer;
   final VoidCallback? onTogglePeerLike;
 
-  static const _bioPlaceholder = 'Présente-toi en 2 mots ✏️';
+  // Pulled from AppStrings so it follows the user's chosen interface
+  // language (fr / en / es supplied; others fall back to en).
+  static String get _bioPlaceholder =>
+      AppStrings.t('profile_bio_placeholder');
 
   Future<void> _openBioEditor(BuildContext context) async {
     final ctrl = TextEditingController(text: bio);
@@ -948,12 +951,12 @@ class _IdentitySection extends StatelessWidget {
               minLines: 2,
               cursorColor: WhatsAppCallTheme.accent,
               style: const TextStyle(color: WhatsAppCallTheme.strongText),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: _bioPlaceholder,
-                hintStyle: TextStyle(color: WhatsAppCallTheme.subtleText),
+                hintStyle: const TextStyle(color: WhatsAppCallTheme.subtleText),
                 filled: true,
                 fillColor: WhatsAppCallTheme.scaffold,
-                border: OutlineInputBorder(
+                border: const OutlineInputBorder(
                   borderSide: BorderSide.none,
                   borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),

@@ -858,9 +858,9 @@ class _ProfileCard extends StatelessWidget {
             Image.network(
               photoUrl,
               fit: BoxFit.cover,
-              // Keep the bottom of the photo (face / torso) when the source
-              // is taller than the card — crop the top instead.
-              alignment: Alignment.bottomCenter,
+              // Centre crop — keeps the face roughly in the middle of the
+              // card whether the source is portrait, square, or landscape.
+              alignment: Alignment.center,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           Positioned.fill(

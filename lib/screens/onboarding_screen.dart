@@ -177,10 +177,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   maxLines: 3,
                   minLines: 2,
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Bio',
-                    hintText: 'Présente-toi en 2 mots ✏️',
-                    prefixIcon: Icon(Icons.short_text,
+                    hintText: AppStrings.t('profile_bio_placeholder'),
+                    prefixIcon: const Icon(Icons.short_text,
                         color: WhatsAppCallTheme.subtleText),
                     alignLabelWithHint: true,
                   ),
