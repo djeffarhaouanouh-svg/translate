@@ -369,39 +369,22 @@ class _FriendChatRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        // Tapping the name also jumps to the profile —
-                        // matches the "tap on someone's name to see them"
-                        // intuition from Insta / Twitter / iMessage.
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: onViewProfile,
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                            style: const TextStyle(
-                              color: WhatsAppCallTheme.strongText,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 17,
-                            ),
-                          ),
-                        ),
+                  // Name on its own line — no more competing with the time
+                  // for horizontal space.
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onViewProfile,
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.strongText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 17,
                       ),
-                      if (lastMessage != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          _formatTime(lastMessage!.createdAt),
-                          style: const TextStyle(
-                            color: WhatsAppCallTheme.subtleText,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   RichText(
@@ -419,20 +402,40 @@ class _FriendChatRow extends StatelessWidget {
                 ],
               ),
             ),
-            // Trailing actions: quick call + 3-dot menu (Voir profil / Bloquer).
-            // Decorative phone glyph — not interactive. Tap on the row still
-            // opens the thread; the phone here just signals "you can call
-            // this person from inside".
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.phone,
-                  color: WhatsAppCallTheme.subtleText, size: 20),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Plus',
-              icon: const Icon(Icons.more_vert,
-                  color: WhatsAppCallTheme.subtleText),
-              color: WhatsAppCallTheme.bar,
+            const SizedBox(width: 8),
+            // Trailing column: time at top with its own space, phone +
+            // 3-dot menu below. Stops the time from being squeezed
+            // between the name ellipsis and the icons.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (lastMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4, bottom: 4),
+                    child: Text(
+                      _formatTime(lastMessage!.createdAt),
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.subtleText,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Decorative phone glyph (not interactive).
+                    const Padding(
+                      padding: EdgeInsets.only(right: 4),
+                      child: Icon(Icons.phone,
+                          color: WhatsAppCallTheme.subtleText, size: 18),
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'Plus',
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.more_vert,
+                          color: WhatsAppCallTheme.subtleText, size: 20),
+                      color: WhatsAppCallTheme.bar,
               onSelected: (v) {
                 if (v == 'profile') onViewProfile();
                 if (v == 'block') onBlock();
@@ -462,6 +465,10 @@ class _FriendChatRow extends StatelessWidget {
                           style: TextStyle(color: Color(0xFFE53935))),
                     ],
                   ),
+                ),
+              ],
+            ),
+                  ],
                 ),
               ],
             ),
