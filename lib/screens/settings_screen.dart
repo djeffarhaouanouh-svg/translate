@@ -89,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Roll back the optimistic UI if the DB write failed.
       setState(() => _hideOnline = !value);
       await _saveBool(_kHideOnline, !value);
-      _toast('Impossible d\'enregistrer ce paramètre.');
+      _toast(AppStrings.t('settings_save_failed'));
     }
   }
 
@@ -107,14 +107,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _changePassword() async {
     if (_email.isEmpty) {
-      _toast('Adresse email introuvable.');
+      _toast(AppStrings.t('settings_email_not_found'));
       return;
     }
     final ok = await _confirm(
-      title: 'Changer le mot de passe',
-      body:
-          'Un email avec un lien de réinitialisation va être envoyé à $_email. Tu pourras choisir un nouveau mot de passe en cliquant sur le lien.',
-      confirmLabel: 'Envoyer le lien',
+      title: AppStrings.t('settings_change_password'),
+      body: AppStrings.t('settings_change_pwd_body', args: {'email': _email}),
+      confirmLabel: AppStrings.t('settings_change_pwd_confirm'),
       destructive: false,
     );
     if (ok != true) return;
@@ -122,10 +121,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await AuthService.resetPassword(_email);
       if (!mounted) return;
-      _toast('Email envoyé. Vérifie ta boîte.');
+      _toast(AppStrings.t('settings_email_sent'));
     } catch (e) {
       if (!mounted) return;
-      _toast('Erreur : $e');
+      _toast(AppStrings.t('error_prefix', args: {'msg': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -152,10 +151,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _deleteAccount() async {
     final ok = await _confirm(
-      title: 'Supprimer le compte ?',
-      body:
-          'Ton profil, tes amis et tes demandes seront effacés. Tu seras déconnecté immédiatement. Cette action est irréversible.',
-      confirmLabel: 'Supprimer',
+      title: AppStrings.t('settings_delete_title'),
+      body: AppStrings.t('settings_delete_body'),
+      confirmLabel: AppStrings.t('settings_delete_confirm'),
       destructive: true,
     );
     if (ok != true) return;
@@ -166,7 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await AuthService.signOut();
     } catch (e) {
       if (!mounted) return;
-      _toast('Erreur : $e');
+      _toast(AppStrings.t('error_prefix', args: {'msg': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -194,13 +192,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Sortie audio',
-                  style: TextStyle(
+                  AppStrings.t('settings_audio_output'),
+                  style: const TextStyle(
                     color: WhatsAppCallTheme.strongText,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -209,14 +207,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             _AudioOutputOption(
-              label: 'Haut-parleur',
+              label: AppStrings.t('settings_audio_speaker'),
               icon: Icons.volume_up,
               value: 'speaker',
               selected: _audioOutput == 'speaker',
               onTap: () => Navigator.of(ctx).pop('speaker'),
             ),
             _AudioOutputOption(
-              label: 'Écouteur',
+              label: AppStrings.t('settings_audio_earpiece'),
               icon: Icons.hearing,
               value: 'earpiece',
               selected: _audioOutput == 'earpiece',
@@ -239,21 +237,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _manageSubscription() {
-    _toast(
-      'La gestion d\'abonnement se fait depuis ton App Store / Play Store.',
-    );
-  }
-
-  void _restorePurchases() {
-    _toast('Restauration des achats — bientôt disponible.');
-  }
-
-  void _openHelp() => _toast('Centre d\'aide — bientôt disponible.');
-  void _contactSupport() =>
-      _toast('Écris-nous à support@swayco.app (à venir : ouverture mailto).');
-  void _openTerms() => _toast('Conditions d\'utilisation — bientôt en ligne.');
-  void _openPrivacy() => _toast('Politique de confidentialité — bientôt en ligne.');
+  void _manageSubscription() =>
+      _toast(AppStrings.t('settings_subscription_appstore'));
+  void _restorePurchases() => _toast(AppStrings.t('settings_restore_soon'));
+  void _openHelp() => _toast(AppStrings.t('settings_help_soon'));
+  void _contactSupport() => _toast(AppStrings.t('settings_contact_soon'));
+  void _openTerms() => _toast(AppStrings.t('settings_terms_soon'));
+  void _openPrivacy() => _toast(AppStrings.t('settings_privacy_soon'));
 
   // ───── Helpers ─────────────────────────────────────────────────────────
 
@@ -310,9 +300,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: WhatsAppCallTheme.scaffold,
         foregroundColor: WhatsAppCallTheme.strongText,
         elevation: 0,
-        title: const Text(
-          'Paramètres',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        title: Text(
+          AppStrings.t('settings_title'),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
       ),
       body: SafeArea(
@@ -321,17 +311,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              // ─── Compte ───
-              const _SectionHeader(label: 'Compte'),
+              _SectionHeader(label: AppStrings.t('settings_section_account')),
               _SettingsCard(children: [
                 _SettingsRow(
                   icon: Icons.alternate_email,
-                  label: 'Email',
+                  label: AppStrings.t('settings_email'),
                   trailing: _SubtleText(_email.isEmpty ? '—' : _email),
                 ),
                 _SettingsRow(
                   icon: Icons.lock_reset,
-                  label: 'Changer le mot de passe',
+                  label: AppStrings.t('settings_change_password'),
                   onTap: _changePassword,
                 ),
                 _SettingsRow(
@@ -342,18 +331,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _SettingsRow(
                   icon: Icons.delete_forever,
-                  label: 'Supprimer le compte',
+                  label: AppStrings.t('settings_delete_account'),
                   color: const Color(0xFFE53935),
                   onTap: _deleteAccount,
                 ),
               ]),
 
-              // ─── Notifications ───
-              const _SectionHeader(label: 'Notifications'),
+              _SectionHeader(
+                  label: AppStrings.t('settings_section_notifications')),
               _SettingsCard(children: [
                 _SettingsToggleRow(
                   icon: Icons.notifications_active_outlined,
-                  label: 'Notifications push',
+                  label: AppStrings.t('settings_push'),
                   value: _push,
                   onChanged: (v) {
                     setState(() => _push = v);
@@ -362,7 +351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _SettingsToggleRow(
                   icon: Icons.volume_up_outlined,
-                  label: 'Sons des notifications',
+                  label: AppStrings.t('settings_sounds'),
                   value: _sounds,
                   onChanged: (v) {
                     setState(() => _sounds = v);
@@ -371,7 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _SettingsToggleRow(
                   icon: Icons.music_note_outlined,
-                  label: 'Sons dans l\'app',
+                  label: AppStrings.t('settings_in_app_sounds'),
                   value: _inAppSounds,
                   onChanged: (v) {
                     setState(() => _inAppSounds = v);
@@ -380,33 +369,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ]),
 
-              // ─── Confidentialité ───
-              const _SectionHeader(label: 'Confidentialité'),
+              _SectionHeader(label: AppStrings.t('settings_section_privacy')),
               _SettingsCard(children: [
                 _SettingsRow(
                   icon: Icons.block,
-                  label: 'Liste des bloqués',
+                  label: AppStrings.t('settings_blocked'),
                   onTap: _openBlockedUsers,
                 ),
                 _SettingsToggleRow(
                   icon: Icons.visibility_off_outlined,
-                  label: 'Cacher mon statut en ligne',
+                  label: AppStrings.t('settings_hide_online'),
                   value: _hideOnline,
                   onChanged: _setHideOnline,
                 ),
               ]),
 
-              // ─── Langue & traduction ───
-              const _SectionHeader(label: 'Langue & traduction'),
+              _SectionHeader(label: AppStrings.t('settings_section_lang')),
               _SettingsCard(children: [
                 _SettingsRow(
                   icon: Icons.language,
-                  label: 'Langue de l\'interface',
+                  label: AppStrings.t('settings_lang_interface'),
                   onTap: _openLanguageEditor,
                 ),
                 _SettingsToggleRow(
                   icon: Icons.translate,
-                  label: 'Auto-traduction par défaut',
+                  label: AppStrings.t('settings_auto_translate'),
                   value: _autoTranslate,
                   onChanged: (v) {
                     setState(() => _autoTranslate = v);
@@ -415,54 +402,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _SettingsRow(
                   icon: Icons.speaker_outlined,
-                  label: 'Sortie audio',
+                  label: AppStrings.t('settings_audio_output'),
                   trailing: _SubtleText(
-                      _audioOutput == 'speaker' ? 'Haut-parleur' : 'Écouteur'),
+                    _audioOutput == 'speaker'
+                        ? AppStrings.t('settings_audio_speaker')
+                        : AppStrings.t('settings_audio_earpiece'),
+                  ),
                   onTap: _pickAudioOutput,
                 ),
               ]),
 
-              // ─── Abonnement ───
-              const _SectionHeader(label: 'Abonnement'),
+              _SectionHeader(
+                  label: AppStrings.t('settings_section_subscription')),
               _SettingsCard(children: [
                 _SettingsRow(
                   icon: Icons.workspace_premium_outlined,
-                  label: 'Gérer mon abonnement',
+                  label: AppStrings.t('settings_manage_sub'),
                   onTap: _manageSubscription,
                 ),
                 _SettingsRow(
                   icon: Icons.restart_alt,
-                  label: 'Restaurer un achat',
+                  label: AppStrings.t('settings_restore_purchase'),
                   onTap: _restorePurchases,
                 ),
               ]),
 
-              // ─── Aide & légal ───
-              const _SectionHeader(label: 'Aide & légal'),
+              _SectionHeader(label: AppStrings.t('settings_section_help')),
               _SettingsCard(children: [
                 _SettingsRow(
                   icon: Icons.help_outline,
-                  label: 'Centre d\'aide / FAQ',
+                  label: AppStrings.t('settings_help_faq'),
                   onTap: _openHelp,
                 ),
                 _SettingsRow(
                   icon: Icons.mail_outline,
-                  label: 'Contacter le support',
+                  label: AppStrings.t('settings_contact'),
                   onTap: _contactSupport,
                 ),
                 _SettingsRow(
                   icon: Icons.gavel_outlined,
-                  label: 'Conditions d\'utilisation',
+                  label: AppStrings.t('settings_terms'),
                   onTap: _openTerms,
                 ),
                 _SettingsRow(
                   icon: Icons.privacy_tip_outlined,
-                  label: 'Politique de confidentialité',
+                  label: AppStrings.t('settings_privacy'),
                   onTap: _openPrivacy,
                 ),
                 _SettingsRow(
                   icon: Icons.info_outline,
-                  label: 'Version',
+                  label: AppStrings.t('settings_version'),
                   trailing: _SubtleText(_appVersion),
                 ),
               ]),
@@ -733,11 +722,14 @@ class _BlockedUsersScreenState extends State<_BlockedUsersScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: WhatsAppCallTheme.bar,
-        title: Text('Débloquer ${p.displayName} ?',
-            style: const TextStyle(color: WhatsAppCallTheme.strongText)),
-        content: const Text(
-          'Cette personne pourra à nouveau te trouver, te contacter et voir tes messages.',
-          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        title: Text(
+          AppStrings.t('blocked_unblock_title_q',
+              args: {'name': p.displayName}),
+          style: const TextStyle(color: WhatsAppCallTheme.strongText),
+        ),
+        content: Text(
+          AppStrings.t('blocked_unblock_body'),
+          style: const TextStyle(color: WhatsAppCallTheme.subtleText),
         ),
         actions: [
           TextButton(
@@ -748,7 +740,7 @@ class _BlockedUsersScreenState extends State<_BlockedUsersScreen> {
             style: FilledButton.styleFrom(
                 backgroundColor: WhatsAppCallTheme.accent),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Débloquer'),
+            child: Text(AppStrings.t('blocked_unblock_confirm')),
           ),
         ],
       ),
@@ -760,8 +752,9 @@ class _BlockedUsersScreenState extends State<_BlockedUsersScreen> {
       setState(() => _blocked = _blocked.where((b) => b.id != p.id).toList());
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppStrings.t('error_prefix', args: {'msg': '$e'})),
+      ));
     }
   }
 
@@ -773,9 +766,9 @@ class _BlockedUsersScreenState extends State<_BlockedUsersScreen> {
         backgroundColor: WhatsAppCallTheme.scaffold,
         foregroundColor: WhatsAppCallTheme.strongText,
         elevation: 0,
-        title: const Text(
-          'Bloqués',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        title: Text(
+          AppStrings.t('blocked_title'),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
       ),
       body: _loading
@@ -859,27 +852,28 @@ class _BlockedEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block, size: 56, color: WhatsAppCallTheme.subtleText),
-            SizedBox(height: 14),
+            const Icon(Icons.block,
+                size: 56, color: WhatsAppCallTheme.subtleText),
+            const SizedBox(height: 14),
             Text(
-              'Aucun utilisateur bloqué',
-              style: TextStyle(
+              AppStrings.t('blocked_empty_title'),
+              style: const TextStyle(
                 color: WhatsAppCallTheme.strongText,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              'Bloque un profil depuis le menu d\'une discussion.',
+              AppStrings.t('blocked_empty_body'),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: WhatsAppCallTheme.subtleText,
                 fontSize: 13,
                 height: 1.4,
