@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../screens/call_screen.dart';
 import '../translation/realtime_translation_port.dart';
 import 'device_id.dart';
+import 'incoming_call_api.dart';
 import 'profile_api.dart';
 import 'supabase_service.dart';
 import 'token_api.dart';
@@ -63,6 +64,15 @@ abstract final class CallLauncher {
         displayName: myName,
         sourceLang: mySourceLang,
       );
+      // Best-effort: fire a "ring" row so the callee's open tab gets a
+      // realtime push to show the incoming-call modal. Failure here is
+      // non-fatal — the call itself still goes through; the peer just
+      // wouldn't be notified.
+      final ringId = await IncomingCallApi.ring(
+        callerId: myId,
+        calleeId: peerDeviceId,
+        roomName: token.roomName,
+      );
       if (!context.mounted) return false;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
@@ -76,6 +86,11 @@ abstract final class CallLauncher {
           ),
         ),
       );
+      // Hangup / leave call → tear down the ring row so the callee's modal
+      // doesn't keep ringing for a call that's already over on this end.
+      if (ringId != null) {
+        await IncomingCallApi.cancel(callId: ringId);
+      }
       return true;
     } catch (e) {
       if (context.mounted) {

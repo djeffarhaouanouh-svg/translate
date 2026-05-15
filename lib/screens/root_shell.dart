@@ -1,11 +1,20 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/app_strings.dart';
 import '../services/chat_unread.dart';
+import '../services/device_id.dart';
+import '../services/incoming_call_api.dart';
+import '../services/profile_api.dart';
+import '../services/supabase_service.dart';
+import '../services/token_api.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
+import '../widgets/profile_avatar.dart';
+import 'call_screen.dart';
 import 'chat_screen.dart';
 import 'discover_screen.dart';
 import 'profile_screen.dart';
@@ -33,6 +42,94 @@ class _RootShellState extends State<RootShell> {
     const DiscoverScreen(),
     const ProfileScreen(),
   ];
+
+  RealtimeChannel? _callsChannel;
+  bool _ringingDialogOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribeIncomingCalls();
+  }
+
+  Future<void> _subscribeIncomingCalls() async {
+    if (!isSupabaseReady) return;
+    final myId = await DeviceId.getOrCreate();
+    if (!mounted || myId.isEmpty) return;
+    _callsChannel = IncomingCallApi.subscribe(
+      calleeId: myId,
+      onCall: _handleIncomingCall,
+    );
+  }
+
+  Future<void> _handleIncomingCall(IncomingCall call) async {
+    if (!mounted || _ringingDialogOpen) return;
+    final caller = isSupabaseReady
+        ? await ProfileApi.fetchById(call.callerId)
+        : null;
+    if (!mounted) return;
+    _ringingDialogOpen = true;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _IncomingCallDialog(
+        callerName: caller?.displayName.isNotEmpty == true
+            ? caller!.displayName
+            : 'Quelqu\'un',
+        callerAvatarUrl: caller?.avatarUrl,
+        callerAvatarColor: caller?.avatarColor,
+      ),
+    );
+    _ringingDialogOpen = false;
+    // Either side of the answer collapses the row so the caller knows.
+    await IncomingCallApi.cancel(callId: call.id);
+    if (!mounted) return;
+    if (accepted == true) {
+      await _joinCallRoom(call);
+    }
+  }
+
+  Future<void> _joinCallRoom(IncomingCall call) async {
+    try {
+      final myId = await DeviceId.getOrCreate();
+      final myProfile = isSupabaseReady
+          ? await ProfileApi.fetchById(myId)
+          : null;
+      final token = await fetchLiveKitToken(
+        roomName: call.roomName,
+        identity: 'u${DateTime.now().millisecondsSinceEpoch}',
+        displayName: myProfile?.displayName ?? '',
+        sourceLang: myProfile?.language ?? '',
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => CallScreen(
+            wsUrl: token.url,
+            jwt: token.token,
+            roomName: token.roomName,
+            displayName: myProfile?.displayName ?? '',
+            mySourceLang: myProfile?.language ?? '',
+            translation: widget.translation,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Impossible de rejoindre l\'appel : $e')),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    final ch = _callsChannel;
+    if (ch != null) {
+      unawaited(Supabase.instance.client.removeChannel(ch));
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +337,149 @@ class _NavItem extends StatelessWidget {
       backgroundColor: WhatsAppCallTheme.danger,
       textColor: Colors.white,
       child: child,
+    );
+  }
+}
+
+/// Modal shown to the callee when a peer rings them. Pops `true` on
+/// "Accepter", `false` on "Refuser".
+class _IncomingCallDialog extends StatefulWidget {
+  const _IncomingCallDialog({
+    required this.callerName,
+    required this.callerAvatarUrl,
+    required this.callerAvatarColor,
+  });
+
+  final String callerName;
+  final String? callerAvatarUrl;
+  final String? callerAvatarColor;
+
+  @override
+  State<_IncomingCallDialog> createState() => _IncomingCallDialogState();
+}
+
+class _IncomingCallDialogState extends State<_IncomingCallDialog> {
+  static const _timeout = Duration(seconds: 30);
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-decline if the user doesn't answer in time so the call doesn't
+    // ring forever after the caller has already given up.
+    _timer = Timer(_timeout, () {
+      if (mounted) Navigator.of(context).pop(false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: WhatsAppCallTheme.bar,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ProfileAvatar(
+              displayName: widget.callerName,
+              avatarUrl: widget.callerAvatarUrl,
+              avatarColorHex: widget.callerAvatarColor,
+              size: 88,
+              fontSize: 36,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.callerName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: WhatsAppCallTheme.strongText,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Appel entrant…',
+              style: TextStyle(
+                color: WhatsAppCallTheme.subtleText,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 28),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _RoundActionButton(
+                  icon: Icons.call_end,
+                  label: 'Refuser',
+                  color: const Color(0xFFE53935),
+                  onTap: () => Navigator.of(context).pop(false),
+                ),
+                _RoundActionButton(
+                  icon: Icons.call,
+                  label: 'Accepter',
+                  color: WhatsAppCallTheme.accent,
+                  onTap: () => Navigator.of(context).pop(true),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoundActionButton extends StatelessWidget {
+  const _RoundActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: color,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 64,
+              height: 64,
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            color: WhatsAppCallTheme.strongText,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
