@@ -45,6 +45,9 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   bool _loading = true;
   // Viewer-mode only: am I currently blocking the displayed user?
   bool _peerBlocked = false;
+  // Viewer-mode only: have I liked the displayed user? Drives the heart
+  // overlay on the peer's Discover photo.
+  bool _iLikePeer = false;
 
   bool get _isViewingOther => widget.userId != null;
   String get _targetId => widget.userId ?? _deviceId;
@@ -90,6 +93,15 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final blocked = _isViewingOther && isSupabaseReady && deviceId.isNotEmpty
         ? await BlockApi.isBlocked(blockerId: deviceId, otherId: targetId)
         : false;
+    // In viewer mode we also need the "do I like this peer?" bit so the
+    // heart overlay renders in the right state on first paint.
+    bool iLike = false;
+    if (_isViewingOther && isSupabaseReady && deviceId.isNotEmpty) {
+      try {
+        final myLikes = await LikeApi.fetchMyLikedIds(deviceId);
+        iLike = myLikes.contains(targetId);
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
       _deviceId = deviceId;
@@ -98,8 +110,30 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       _counts = counts;
       _likesCount = likes;
       _peerBlocked = blocked;
+      _iLikePeer = iLike;
       _loading = false;
     });
+  }
+
+  /// Optimistic like/unlike of the displayed peer (viewer mode). Roll back
+  /// the local flag if the DB write fails.
+  Future<void> _togglePeerLike() async {
+    if (!_isViewingOther || _deviceId.isEmpty || _targetId.isEmpty) return;
+    final wasLiked = _iLikePeer;
+    setState(() => _iLikePeer = !wasLiked);
+    try {
+      if (wasLiked) {
+        await LikeApi.unlike(likerId: _deviceId, likedId: _targetId);
+      } else {
+        await LikeApi.like(likerId: _deviceId, likedId: _targetId);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _iLikePeer = wasLiked);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible d\'enregistrer le like.')),
+      );
+    }
   }
 
   void _openLikesReceived() {
@@ -506,6 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     discoverPhotoUrl: _remote?.discoverPhotoUrl ?? '',
                     viewerMode: _isViewingOther,
                     peerBlocked: _peerBlocked,
+                    iLikePeer: _iLikePeer,
                     onTapAvatar: _pickAndUploadAvatar,
                     onEditBio: _saveBio,
                     onTapFollowers: () => _openFriendsList(FriendDirection.followers),
@@ -515,6 +550,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onEdit: _openEditor,
                     onSettings: _openSettings,
                     onToggleBlock: _toggleBlock,
+                    onTogglePeerLike: _togglePeerLike,
                   ),
                   const SizedBox(height: 20),
                   _LanguageCard(
@@ -800,6 +836,8 @@ class _IdentitySection extends StatelessWidget {
     this.viewerMode = false,
     this.peerBlocked = false,
     this.onToggleBlock,
+    this.iLikePeer = false,
+    this.onTogglePeerLike,
   });
 
   final String displayName;
@@ -825,6 +863,10 @@ class _IdentitySection extends StatelessWidget {
   final bool viewerMode;
   final bool peerBlocked;
   final VoidCallback? onToggleBlock;
+  /// Viewer-mode only: have I liked this peer? Drives the heart overlay
+  /// on their photo cell.
+  final bool iLikePeer;
+  final VoidCallback? onTogglePeerLike;
 
   static const _bioPlaceholder = 'Présente-toi en 2 mots ✏️';
 
@@ -1061,6 +1103,9 @@ class _IdentitySection extends StatelessWidget {
           // the "Qui m'a liké" screen.
           likesCount: viewerMode ? 0 : likesCount,
           onTapLikes: onTapLikes,
+          // Viewer mode: heart overlay so I can like the peer's photo.
+          iLikePeer: iLikePeer,
+          onTogglePeerLike: onTogglePeerLike,
         ),
       ],
     );
@@ -1074,6 +1119,8 @@ class _PhotosGrid extends StatelessWidget {
     required this.onPick,
     this.likesCount = 0,
     this.onTapLikes,
+    this.iLikePeer = false,
+    this.onTogglePeerLike,
   });
 
   final String discoverPhotoUrl;
@@ -1081,6 +1128,8 @@ class _PhotosGrid extends StatelessWidget {
   final VoidCallback onPick;
   final int likesCount;
   final VoidCallback? onTapLikes;
+  final bool iLikePeer;
+  final VoidCallback? onTogglePeerLike;
 
   @override
   Widget build(BuildContext context) {
@@ -1098,6 +1147,8 @@ class _PhotosGrid extends StatelessWidget {
             onTap: onPick,
             likesCount: likesCount,
             onTapLikes: onTapLikes,
+            iLikePeer: iLikePeer,
+            onTogglePeerLike: onTogglePeerLike,
           ),
         ),
       ),
@@ -1112,6 +1163,8 @@ class _PhotoCell extends StatelessWidget {
     required this.onTap,
     this.likesCount = 0,
     this.onTapLikes,
+    this.iLikePeer = false,
+    this.onTogglePeerLike,
   });
 
   final String? photoUrl;
@@ -1119,12 +1172,18 @@ class _PhotoCell extends StatelessWidget {
   final VoidCallback onTap;
   final int likesCount;
   final VoidCallback? onTapLikes;
+  final bool iLikePeer;
+  final VoidCallback? onTogglePeerLike;
 
   @override
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     final tappable = !viewerMode;
     final showLikesBadge = !viewerMode && onTapLikes != null;
+    // In viewer mode, render a heart button on the photo so I can like
+    // the peer right from their profile. Hidden when there's no photo
+    // (the empty cell is already a "image_not_supported" glyph).
+    final showLikeAction = viewerMode && hasPhoto && onTogglePeerLike != null;
     return Material(
       color: WhatsAppCallTheme.bar,
       borderRadius: BorderRadius.circular(10),
@@ -1182,6 +1241,40 @@ class _PhotoCell extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (showLikeAction)
+            Positioned(
+              right: 4, bottom: 4,
+              child: Material(
+                color: iLikePeer
+                    ? const Color(0xFFFF3B5C).withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: 0.55),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onTogglePeerLike,
+                  child: Container(
+                    width: 30, height: 30,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: iLikePeer
+                            ? const Color(0xFFFF3B5C)
+                            : Colors.white.withValues(alpha: 0.20),
+                        width: iLikePeer ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Icon(
+                      iLikePeer ? Icons.favorite : Icons.favorite_border,
+                      size: iLikePeer ? 16 : 14,
+                      color: iLikePeer
+                          ? const Color(0xFFFF3B5C)
+                          : Colors.white,
                     ),
                   ),
                 ),
