@@ -228,17 +228,17 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final w = _cardSize.width == 0
         ? MediaQuery.of(context).size.width
         : _cardSize.width;
-    // Place the previous card off-screen on the left, then animate it back
-    // to center — mirror of the fly-off swipe.
+    // Mirror of the fly-off: drop the previous card off-screen on the left
+    // (same offsets the swipe uses, just negated) then animate it back.
     setState(() {
       _topIndex -= 1;
-      _drag = Offset(-(w + 200), 60);
+      _drag = Offset(-(w + 200), 80);
     });
     _animFrom = _drag;
     _animTo = Offset.zero;
     _isFlying = false;
     _ctrl
-      ..duration = const Duration(milliseconds: 320)
+      ..duration = const Duration(milliseconds: 240)
       ..forward(from: 0);
   }
 
