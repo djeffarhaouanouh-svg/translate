@@ -555,32 +555,15 @@ class _Composer extends StatelessWidget {
                     filled: true,
                     fillColor: WhatsAppCallTheme.surface,
                     contentPadding: const EdgeInsets.fromLTRB(2, 10, 14, 10),
-                    // Translate toggle lives inside the field on the left,
-                    // pushing the "Message" hint to the right. Tap flips
-                    // auto-translate state for the thread.
-                    prefixIcon: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
+                    // Translate switch lives inline at the left of the field
+                    // — icon + sliding pill, tap-to-toggle. Pushes the
+                    // "Message" hint to the right.
+                    prefixIcon: _ComposerTranslateToggle(
+                      active: autoTranslate,
                       onTap: onToggleTranslate,
-                      child: Container(
-                        margin: const EdgeInsets.only(left: 6, right: 6),
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: autoTranslate
-                              ? WhatsAppCallTheme.accent.withValues(alpha: 0.18)
-                              : Colors.transparent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.translate,
-                          size: 18,
-                          color: autoTranslate
-                              ? WhatsAppCallTheme.accent
-                              : WhatsAppCallTheme.subtleText,
-                        ),
-                      ),
                     ),
                     prefixIconConstraints: const BoxConstraints(
-                      minWidth: 40, minHeight: 32,
+                      minWidth: 76, minHeight: 32,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(22),
@@ -618,6 +601,76 @@ class _Composer extends StatelessWidget {
                           ),
                         )
                       : const Icon(Icons.send, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline translate switch shown as a TextField prefix in the chat composer.
+/// Icon + sliding pill ball — tap anywhere on it flips _autoTranslate.
+class _ComposerTranslateToggle extends StatelessWidget {
+  const _ComposerTranslateToggle({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8, right: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.translate,
+              size: 18,
+              color: active
+                  ? WhatsAppCallTheme.accent
+                  : WhatsAppCallTheme.subtleText,
+            ),
+            const SizedBox(width: 6),
+            // Mini sliding pill — same look as the previous AppBar switch.
+            Container(
+              width: 30, height: 16,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: active
+                    ? WhatsAppCallTheme.accent.withValues(alpha: 0.45)
+                    : const Color(0xFF2A3942),
+                borderRadius: BorderRadius.circular(999),
+                border:
+                    Border.all(color: Colors.white.withValues(alpha: 0.10)),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                alignment:
+                    active ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 12, height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: active
+                        ? WhatsAppCallTheme.accent
+                        : Colors.white.withValues(alpha: 0.40),
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: WhatsAppCallTheme.accent
+                                  .withValues(alpha: 0.55),
+                              blurRadius: 6,
+                            ),
+                          ]
+                        : null,
+                  ),
                 ),
               ),
             ),

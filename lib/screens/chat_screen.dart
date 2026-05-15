@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/block_api.dart';
+import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
@@ -154,6 +156,67 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _reload();
   }
 
+  void _callPeer(RemoteProfile peer) {
+    CallLauncher.startCall(
+      context,
+      peerDeviceId: peer.id,
+      translation: widget.translation,
+    );
+  }
+
+  void _viewProfile(RemoteProfile peer) {
+    // No standalone "other user profile" screen yet — placeholder until that
+    // view ships. Keeps the menu real so users see the option exists.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Profil de ${peer.displayName} — bientôt disponible'),
+        backgroundColor: WhatsAppCallTheme.bar,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _blockPeer(RemoteProfile peer) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WhatsAppCallTheme.bar,
+        title: Text(
+          'Bloquer ${peer.displayName} ?',
+          style: const TextStyle(color: WhatsAppCallTheme.strongText),
+        ),
+        content: const Text(
+          'Cette personne ne pourra plus te trouver, te contacter ni t\'appeler. Tu peux annuler depuis Paramètres → Bloqués.',
+          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Bloquer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || _myId.isEmpty) return;
+    try {
+      await BlockApi.block(blockerId: _myId, blockedId: peer.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${peer.displayName} bloqué.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -222,6 +285,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             lastMessage: last,
             isMine: last?.senderId == _myId,
             onTap: () => _openThread(p),
+            onCall: () => _callPeer(p),
+            onViewProfile: () => _viewProfile(p),
+            onBlock: () => _blockPeer(p),
           );
         },
       ),
@@ -235,11 +301,17 @@ class _FriendChatRow extends StatelessWidget {
     required this.lastMessage,
     required this.isMine,
     required this.onTap,
+    required this.onCall,
+    required this.onViewProfile,
+    required this.onBlock,
   });
   final RemoteProfile profile;
   final ChatMessage? lastMessage;
   final bool isMine;
   final VoidCallback onTap;
+  final VoidCallback onCall;
+  final VoidCallback onViewProfile;
+  final VoidCallback onBlock;
 
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
@@ -349,6 +421,49 @@ class _FriendChatRow extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            // Trailing actions: quick call + 3-dot menu (Voir profil / Bloquer).
+            IconButton(
+              tooltip: 'Appeler',
+              onPressed: onCall,
+              icon: const Icon(Icons.phone, color: WhatsAppCallTheme.accent),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Plus',
+              icon: const Icon(Icons.more_vert,
+                  color: WhatsAppCallTheme.subtleText),
+              color: WhatsAppCallTheme.bar,
+              onSelected: (v) {
+                if (v == 'profile') onViewProfile();
+                if (v == 'block') onBlock();
+              },
+              itemBuilder: (ctx) => const [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_outline,
+                          size: 18, color: WhatsAppCallTheme.strongText),
+                      SizedBox(width: 10),
+                      Text('Voir profil',
+                          style: TextStyle(
+                              color: WhatsAppCallTheme.strongText)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'block',
+                  child: Row(
+                    children: [
+                      Icon(Icons.block,
+                          size: 18, color: Color(0xFFE53935)),
+                      SizedBox(width: 10),
+                      Text('Bloquer',
+                          style: TextStyle(color: Color(0xFFE53935))),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
