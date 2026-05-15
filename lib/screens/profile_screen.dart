@@ -955,8 +955,9 @@ class _IdentitySection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         // Stats row, TikTok-style. On my own profile we add a private
-        // "likes" column between posts and followers — tappable, opens
-        // the "Qui m'a liké" screen. Hidden in viewer mode (private).
+        // posts | followers | following. Likes count moved to a badge on
+        // the Discover photo cell below (private to me, not shown in
+        // viewer mode).
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -965,14 +966,6 @@ class _IdentitySection extends StatelessWidget {
               label: 'posts',
             ),
             const _StatDivider(),
-            if (!viewerMode) ...[
-              _InlineStat(
-                value: likesCount,
-                label: 'likes',
-                onTap: onTapLikes,
-              ),
-              const _StatDivider(),
-            ],
             _InlineStat(
               value: counts.followers,
               label: AppStrings.t('profile_followers').toLowerCase(),
@@ -1064,6 +1057,10 @@ class _IdentitySection extends StatelessWidget {
           discoverPhotoUrl: discoverPhotoUrl,
           viewerMode: viewerMode,
           onPick: onPickDiscoverPhoto,
+          // Likes badge only on my own profile (private). Tap it → opens
+          // the "Qui m'a liké" screen.
+          likesCount: viewerMode ? 0 : likesCount,
+          onTapLikes: onTapLikes,
         ),
       ],
     );
@@ -1075,21 +1072,20 @@ class _PhotosGrid extends StatelessWidget {
     required this.discoverPhotoUrl,
     required this.viewerMode,
     required this.onPick,
+    this.likesCount = 0,
+    this.onTapLikes,
   });
 
   final String discoverPhotoUrl;
   final bool viewerMode;
   final VoidCallback onPick;
+  final int likesCount;
+  final VoidCallback? onTapLikes;
 
   @override
   Widget build(BuildContext context) {
     final hasPhoto = discoverPhotoUrl.isNotEmpty;
-    // In viewer mode skip the section entirely when the peer has no
-    // photo — no point showing an empty box for someone else.
     if (viewerMode && !hasPhoto) return const SizedBox.shrink();
-    // Single tile sized like one cell of a 3-column Insta grid, aligned
-    // left so the rest of the row stays "gridded" visually without
-    // padding fake placeholders.
     return Align(
       alignment: Alignment.centerLeft,
       child: FractionallySizedBox(
@@ -1100,6 +1096,8 @@ class _PhotosGrid extends StatelessWidget {
             photoUrl: hasPhoto ? discoverPhotoUrl : null,
             viewerMode: viewerMode,
             onTap: onPick,
+            likesCount: likesCount,
+            onTapLikes: onTapLikes,
           ),
         ),
       ),
@@ -1112,42 +1110,84 @@ class _PhotoCell extends StatelessWidget {
     required this.photoUrl,
     required this.viewerMode,
     required this.onTap,
+    this.likesCount = 0,
+    this.onTapLikes,
   });
 
   final String? photoUrl;
   final bool viewerMode;
   final VoidCallback onTap;
+  final int likesCount;
+  final VoidCallback? onTapLikes;
 
   @override
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     final tappable = !viewerMode;
+    final showLikesBadge = !viewerMode && onTapLikes != null;
     return Material(
       color: WhatsAppCallTheme.bar,
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: tappable ? onTap : null,
-        child: hasPhoto
-            ? Image.network(
-                photoUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const Center(
-                  child: Icon(Icons.broken_image_outlined,
-                      color: WhatsAppCallTheme.subtleText),
-                ),
-              )
-            : Center(
-                child: Icon(
-                  tappable
-                      ? Icons.add_a_photo_outlined
-                      : Icons.image_not_supported_outlined,
-                  color: tappable
-                      ? WhatsAppCallTheme.accent
-                      : WhatsAppCallTheme.subtleText,
-                  size: 22,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          InkWell(
+            onTap: tappable ? onTap : null,
+            child: hasPhoto
+                ? Image.network(
+                    photoUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Center(
+                      child: Icon(Icons.broken_image_outlined,
+                          color: WhatsAppCallTheme.subtleText),
+                    ),
+                  )
+                : Center(
+                    child: Icon(
+                      tappable
+                          ? Icons.add_a_photo_outlined
+                          : Icons.image_not_supported_outlined,
+                      color: tappable
+                          ? WhatsAppCallTheme.accent
+                          : WhatsAppCallTheme.subtleText,
+                      size: 22,
+                    ),
+                  ),
+          ),
+          if (showLikesBadge)
+            Positioned(
+              left: 6, bottom: 6,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(999),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: onTapLikes,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.favorite,
+                            size: 12, color: Color(0xFFFF3B5C)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$likesCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
+            ),
+        ],
       ),
     );
   }
