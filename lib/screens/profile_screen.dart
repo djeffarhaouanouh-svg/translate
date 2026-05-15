@@ -382,6 +382,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 // Reserve room for the floating bottom nav (height 54 + 12 gap)
                 // plus the device's bottom safe-area inset, otherwise the last
                 // card gets occluded.
+                // Horizontal gutter matches the chat / discover headers so
+                // the avatar and bio don't run into the screen edge.
                 padding: EdgeInsets.fromLTRB(
                   28, 20, 28,
                   32 + 64 + MediaQuery.paddingOf(context).bottom,
