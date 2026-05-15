@@ -432,6 +432,32 @@ abstract final class ProfileApi {
     }
   }
 
+  /// Drop the user's Discover photo: clear the column on profiles AND
+  /// remove both common file extensions from storage so a re-upload of
+  /// the opposite extension doesn't leave the old one orphaned. Failures
+  /// on storage cleanup are swallowed — the DB row clear is what matters
+  /// for the visible UI; storage detritus is at worst a few KB.
+  static Future<void> deleteMyDiscoverPhoto(String userId) async {
+    if (!isSupabaseReady || userId.isEmpty) return;
+    try {
+      await _c.from('profiles').update({
+        'discover_photo_url': '',
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', userId);
+    } catch (e) {
+      debugPrint('ProfileApi.deleteMyDiscoverPhoto: DB update failed: $e');
+      rethrow;
+    }
+    try {
+      await _c.storage.from('avatars').remove([
+        'discover/$userId.jpg',
+        'discover/$userId.png',
+      ]);
+    } catch (e) {
+      debugPrint('ProfileApi.deleteMyDiscoverPhoto: storage cleanup failed: $e');
+    }
+  }
+
   /// People to surface on the Discover stack. Excludes the caller and
   /// anyone the caller has blocked / who has blocked the caller. Friends
   /// are still included — the user explicitly wants to keep seeing them

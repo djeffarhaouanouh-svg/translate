@@ -260,9 +260,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: _friends.length,
+        // Brighter separator so rows read distinctly against the dark
+        // scaffold (the previous near-black 0xFF1F2C34 was invisible).
         separatorBuilder: (_, _) => const Divider(
           height: 1,
-          color: Color(0xFF1F2C34),
+          thickness: 1,
+          color: Color(0xFF2F3D45),
           indent: 76,
         ),
         itemBuilder: (ctx, i) {

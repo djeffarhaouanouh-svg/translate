@@ -431,6 +431,47 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     }
   }
 
+  Future<void> _deleteDiscoverPhoto() async {
+    if (_deviceId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WhatsAppCallTheme.bar,
+        title: const Text(
+          'Supprimer la photo ?',
+          style: TextStyle(color: WhatsAppCallTheme.strongText),
+        ),
+        content: const Text(
+          'Ta photo Discover sera retirée. Tu pourras en uploader une nouvelle à tout moment.',
+          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(AppStrings.t('cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ProfileApi.deleteMyDiscoverPhoto(_deviceId);
+      if (!mounted) return;
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Suppression échouée : $e')),
+      );
+    }
+  }
+
   Future<void> _saveBio(String bio) async {
     if (_deviceId.isEmpty) return;
     final saved = await ProfileApi.updateMyBio(userId: _deviceId, bio: bio);
@@ -547,6 +588,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onTapFollowing: () => _openFriendsList(FriendDirection.following),
                     onTapLikes: _openLikesReceived,
                     onPickDiscoverPhoto: _pickAndUploadDiscoverPhoto,
+                    onDeleteDiscoverPhoto: _deleteDiscoverPhoto,
                     onEdit: _openEditor,
                     onSettings: _openSettings,
                     onToggleBlock: _toggleBlock,
@@ -831,6 +873,7 @@ class _IdentitySection extends StatelessWidget {
     required this.onTapFollowing,
     required this.onTapLikes,
     required this.onPickDiscoverPhoto,
+    required this.onDeleteDiscoverPhoto,
     required this.onEdit,
     required this.onSettings,
     this.viewerMode = false,
@@ -855,6 +898,7 @@ class _IdentitySection extends StatelessWidget {
   final VoidCallback onTapFollowing;
   final VoidCallback onTapLikes;
   final VoidCallback onPickDiscoverPhoto;
+  final VoidCallback onDeleteDiscoverPhoto;
   final VoidCallback onEdit;
   final VoidCallback onSettings;
   /// True when this section is rendering someone else's profile read-only.
@@ -1099,6 +1143,7 @@ class _IdentitySection extends StatelessWidget {
           discoverPhotoUrl: discoverPhotoUrl,
           viewerMode: viewerMode,
           onPick: onPickDiscoverPhoto,
+          onDelete: onDeleteDiscoverPhoto,
           // Likes badge only on my own profile (private). Tap it → opens
           // the "Qui m'a liké" screen.
           likesCount: viewerMode ? 0 : likesCount,
@@ -1117,6 +1162,7 @@ class _PhotosGrid extends StatelessWidget {
     required this.discoverPhotoUrl,
     required this.viewerMode,
     required this.onPick,
+    this.onDelete,
     this.likesCount = 0,
     this.onTapLikes,
     this.iLikePeer = false,
@@ -1126,6 +1172,7 @@ class _PhotosGrid extends StatelessWidget {
   final String discoverPhotoUrl;
   final bool viewerMode;
   final VoidCallback onPick;
+  final VoidCallback? onDelete;
   final int likesCount;
   final VoidCallback? onTapLikes;
   final bool iLikePeer;
@@ -1145,6 +1192,7 @@ class _PhotosGrid extends StatelessWidget {
             photoUrl: hasPhoto ? discoverPhotoUrl : null,
             viewerMode: viewerMode,
             onTap: onPick,
+            onDelete: onDelete,
             likesCount: likesCount,
             onTapLikes: onTapLikes,
             iLikePeer: iLikePeer,
@@ -1161,6 +1209,7 @@ class _PhotoCell extends StatelessWidget {
     required this.photoUrl,
     required this.viewerMode,
     required this.onTap,
+    this.onDelete,
     this.likesCount = 0,
     this.onTapLikes,
     this.iLikePeer = false,
@@ -1170,6 +1219,9 @@ class _PhotoCell extends StatelessWidget {
   final String? photoUrl;
   final bool viewerMode;
   final VoidCallback onTap;
+  /// When non-null and a photo is set on my own profile, a small trash
+  /// button appears top-right to delete the photo.
+  final VoidCallback? onDelete;
   final int likesCount;
   final VoidCallback? onTapLikes;
   final bool iLikePeer;
@@ -1184,6 +1236,8 @@ class _PhotoCell extends StatelessWidget {
     // the peer right from their profile. Hidden when there's no photo
     // (the empty cell is already a "image_not_supported" glyph).
     final showLikeAction = viewerMode && hasPhoto && onTogglePeerLike != null;
+    // Trash button: only on my own profile when a photo is actually set.
+    final showDeleteAction = !viewerMode && hasPhoto && onDelete != null;
     return Material(
       color: WhatsAppCallTheme.bar,
       borderRadius: BorderRadius.circular(10),
@@ -1242,6 +1296,24 @@ class _PhotoCell extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                ),
+              ),
+            ),
+          if (showDeleteAction)
+            Positioned(
+              right: 4, top: 4,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onDelete,
+                  child: Container(
+                    width: 28, height: 28,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.delete_outline,
+                        color: Color(0xFFFF6B6B), size: 16),
                   ),
                 ),
               ),
