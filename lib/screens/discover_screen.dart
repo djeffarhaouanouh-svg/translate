@@ -223,6 +223,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     setState(() => _topIndex += 1);
   }
 
+  void _back() {
+    if (_topIndex <= 0 || _ctrl.isAnimating) return;
+    setState(() {
+      _topIndex -= 1;
+      _drag = Offset.zero;
+    });
+  }
+
   void _sendHello(String name) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -341,6 +349,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           _sendHello(_profiles[_topIndex].name);
                           _advance();
                         },
+                        onBack: _topIndex > 0 ? _back : null,
                       ),
                     ),
                   ),
@@ -704,10 +713,14 @@ class _ProfileCard extends StatelessWidget {
   const _ProfileCard({
     required this.profile,
     required this.onAdd,
+    this.onBack,
   });
 
   final _DemoProfile profile;
   final VoidCallback onAdd;
+  /// When non-null, a circular back arrow is rendered at the top-left of the
+  /// card. Tapping it returns to the previous profile.
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -739,6 +752,12 @@ class _ProfileCard extends StatelessWidget {
               ),
             ),
           ),
+          if (onBack != null)
+            Positioned(
+              top: 14,
+              left: 14,
+              child: _BackButton(onTap: onBack!),
+            ),
           Positioned(
             left: 22,
             right: 22,
@@ -895,6 +914,34 @@ class _AddButtonState extends State<_AddButton>
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Circular "rewind" button — top-left of the top card. Shown only when
+/// there's a previous profile to return to.
+class _BackButton extends StatelessWidget {
+  const _BackButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(
+            Icons.arrow_back_ios_new,
+            color: Colors.white,
+            size: 18,
           ),
         ),
       ),
