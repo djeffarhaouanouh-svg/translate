@@ -238,48 +238,62 @@ class _DiscoverHeader extends StatelessWidget {
             'Discover',
             style: TextStyle(
               color: WhatsAppCallTheme.strongText,
-              fontSize: 22,
+              fontSize: 26,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
             ),
           ),
-          const SizedBox(width: 14),
-          // Tappable "fake" search field — opens the real search screen.
-          // Sized like a mini text input so it reads as a search affordance,
-          // not just an icon.
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _openSearch(context),
-              child: Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: WhatsAppCallTheme.bar,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.search,
-                        size: 18, color: WhatsAppCallTheme.subtleText),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Chercher un ami',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: WhatsAppCallTheme.subtleText
-                              .withValues(alpha: 0.85),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          const Spacer(),
+          // Compact search pill — opens the real SearchScreen on tap.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _openSearch(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: WhatsAppCallTheme.bar,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.search, size: 16, color: WhatsAppCallTheme.subtleText),
+                  SizedBox(width: 6),
+                  Text(
+                    'Chercher',
+                    style: TextStyle(
+                      color: WhatsAppCallTheme.subtleText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: WhatsAppCallTheme.bar,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.tune, size: 16, color: WhatsAppCallTheme.subtleText),
+                SizedBox(width: 6),
+                Text(
+                  'Filtres',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.subtleText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
