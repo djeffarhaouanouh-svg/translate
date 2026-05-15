@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/login_screen.dart';
@@ -18,14 +17,8 @@ import 'translation/openai_realtime_translation.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Load .env first so app_config can read SUPABASE_* at runtime. A missing
-  // file is non-fatal — initSupabase() will simply skip init if the keys
-  // remain empty.
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (e) {
-    debugPrint('dotenv: .env not loaded ($e) — falling back to --dart-define.');
-  }
+  // Supabase keys come from --dart-define at build time (Railway / IDE
+  // launch.json). No .env loading on the deployed web build.
   await initSupabase();
   runApp(const LiveKitTranslateApp());
 }
