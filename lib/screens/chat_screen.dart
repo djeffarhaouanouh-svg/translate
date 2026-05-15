@@ -170,9 +170,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   'Messages',
                   style: TextStyle(
                     color: WhatsAppCallTheme.strongText,
-                    fontSize: 28,
+                    fontSize: 26,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
