@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/whatsapp_call_theme.dart';
 
@@ -32,10 +33,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     });
   }
 
-  void _addFriend(String name) {
+  void _sendHello(String name) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Demande envoyée à $name'),
+        content: Text('👋 envoyé à $name'),
         duration: const Duration(seconds: 2),
         backgroundColor: WhatsAppCallTheme.bar,
       ),
@@ -99,7 +100,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               profile: _profiles[_topIndex],
               liked: _liked.contains(_profiles[_topIndex].name),
               onAdd: () {
-                _addFriend(_profiles[_topIndex].name);
+                _sendHello(_profiles[_topIndex].name);
                 _advance();
               },
               onToggleLike: () => _toggleLike(_profiles[_topIndex].name),
@@ -287,9 +288,60 @@ class _ProfileCard extends StatelessWidget {
   }
 }
 
-class _AddButton extends StatelessWidget {
+/// "Envoyer 👋" — the emoji scales up briefly and the device gives a short
+/// haptic tap on press. Parent then advances to the next card.
+class _AddButton extends StatefulWidget {
   const _AddButton({required this.onTap});
   final VoidCallback onTap;
+
+  @override
+  State<_AddButton> createState() => _AddButtonState();
+}
+
+class _AddButtonState extends State<_AddButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+  late final Animation<double> _rotate;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    // Scale: 1 → 1.7 → 1, with overshoot.
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(
+          tween: Tween(begin: 1.0, end: 1.7)
+              .chain(CurveTween(curve: Curves.easeOut)),
+          weight: 40),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.7, end: 1.0)
+              .chain(CurveTween(curve: Curves.easeIn)),
+          weight: 60),
+    ]).animate(_ctrl);
+    // Wave: -15° → +15° → -10° → 0 over the burst.
+    _rotate = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -0.26), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: -0.26, end: 0.26), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: 0.26, end: -0.17), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: -0.17, end: 0.0), weight: 25),
+    ]).animate(_ctrl);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onPress() {
+    HapticFeedback.mediumImpact();
+    _ctrl.forward(from: 0);
+    widget.onTap();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -298,21 +350,29 @@ class _AddButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        onTap: _onPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.person_add_alt_1, size: 18, color: Colors.white),
-              SizedBox(width: 6),
-              Text(
-                'Ajouter',
+              const Text(
+                'Envoyer ',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.2,
+                ),
+              ),
+              AnimatedBuilder(
+                animation: _ctrl,
+                builder: (_, _) => Transform.rotate(
+                  angle: _rotate.value,
+                  child: Transform.scale(
+                    scale: _scale.value,
+                    child: const Text('👋', style: TextStyle(fontSize: 16)),
+                  ),
                 ),
               ),
             ],
