@@ -874,7 +874,6 @@ class _IdentitySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emptyBio = bio.trim().isEmpty;
-    final hasPhoto = discoverPhotoUrl.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
