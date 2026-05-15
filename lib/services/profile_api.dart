@@ -432,19 +432,17 @@ abstract final class ProfileApi {
     }
   }
 
-  /// People to surface on the Discover stack. Excludes the caller, anyone
-  /// the caller has blocked / who has blocked the caller, and anyone the
-  /// caller is already friends with (those live in the Chat tab). Sorted
-  /// by most-recently-updated profile first so freshly-onboarded users
-  /// surface near the top.
+  /// People to surface on the Discover stack. Excludes the caller and
+  /// anyone the caller has blocked / who has blocked the caller. Friends
+  /// are still included — the user explicitly wants to keep seeing them
+  /// in Discover (they may want to call again from there). Sorted by
+  /// most-recently-updated profile first.
   static Future<List<RemoteProfile>> fetchDiscoverFeed({
     required String myId,
     int limit = 50,
   }) async {
     if (!isSupabaseReady || myId.isEmpty) return const [];
     try {
-      // Pull a generous batch then filter client-side. Cheaper than three
-      // server-side joins for the number of rows we expect.
       final rows = await _c
           .from('profiles')
           .select()
@@ -468,20 +466,6 @@ abstract final class ProfileApi {
           final blocked = m['blocked']?.toString() ?? '';
           if (blocker == myId && blocked.isNotEmpty) excluded.add(blocked);
           if (blocked == myId && blocker.isNotEmpty) excluded.add(blocker);
-        }
-      } catch (_) {}
-      try {
-        final friends = await _c
-            .from('friendships')
-            .select('requester, addressee, status')
-            .or('requester.eq.$myId,addressee.eq.$myId')
-            .eq('status', 'accepted');
-        for (final row in (friends as List)) {
-          final m = Map<String, dynamic>.from(row as Map);
-          final r = m['requester']?.toString() ?? '';
-          final a = m['addressee']?.toString() ?? '';
-          if (r == myId && a.isNotEmpty) excluded.add(a);
-          if (a == myId && r.isNotEmpty) excluded.add(r);
         }
       } catch (_) {}
 
