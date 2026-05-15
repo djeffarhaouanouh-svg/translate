@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/login_screen.dart';
@@ -17,6 +18,14 @@ import 'translation/openai_realtime_translation.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load .env first so app_config can read SUPABASE_* at runtime. A missing
+  // file is non-fatal — initSupabase() will simply skip init if the keys
+  // remain empty.
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    debugPrint('dotenv: .env not loaded ($e) — falling back to --dart-define.');
+  }
   await initSupabase();
   runApp(const LiveKitTranslateApp());
 }
@@ -64,37 +73,42 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   }
 
   Future<void> _bootstrap() async {
-    // Onboarding (name + language) is now stored locally and runs BEFORE
-    // login, so the login screen itself is rendered in the user's chosen
-    // language. Restore the UI language from local prefs as early as possible.
-    final profile = await UserPrefs.loadProfile();
-    if (profile != null && profile.sourceLang.isNotEmpty) {
-      AppStrings.setFromCode(profile.sourceLang);
+    // Restore the UI language from local prefs as early as possible so the
+    // login screen renders in whatever the user picked last time on this
+    // device (no-op for a fresh install — falls back to the default).
+    final localProfile = await UserPrefs.loadProfile();
+    if (localProfile != null && localProfile.sourceLang.isNotEmpty) {
+      AppStrings.setFromCode(localProfile.sourceLang);
     }
-    final hasLocalOnboarding =
-        profile != null && profile.firstName.trim().isNotEmpty;
     final authed = AuthService.isAuthenticated;
+    var needsOnboarding = false;
     if (authed) {
-      await _hydrateAuthedSession();
+      needsOnboarding = await _resolveNeedsOnboarding();
+      if (!needsOnboarding) {
+        await _hydrateAuthedSession();
+      }
     }
     if (!mounted) return;
     setState(() {
       _authed = authed;
-      _needsOnboarding = !hasLocalOnboarding;
+      _needsOnboarding = needsOnboarding;
       _loading = false;
     });
   }
 
   /// Called whenever a fresh sign-in happens (login or signup confirmation).
+  /// Brand-new accounts have no `profiles` row yet — that's how we know to
+  /// route them through onboarding before the main shell.
   Future<void> _onSignedIn() async {
     setState(() => _loading = true);
-    await _hydrateAuthedSession();
+    final needsOnboarding = await _resolveNeedsOnboarding();
+    if (!needsOnboarding) {
+      await _hydrateAuthedSession();
+    }
     if (!mounted) return;
-    // Onboarding already happened pre-login by design, so we never bounce
-    // back to it here. The Supabase profile row was either created by the
-    // hydrate step above, or by the upsert call there if missing.
     setState(() {
       _authed = true;
+      _needsOnboarding = needsOnboarding;
       _loading = false;
     });
   }
@@ -106,19 +120,32 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
     });
   }
 
+  /// True when this auth user has never completed onboarding — detected by
+  /// the absence of a `profiles` row (or one with no display name) on
+  /// Supabase. This is the source of truth so a returning user signing in
+  /// on a fresh device skips onboarding even though local prefs are empty.
+  Future<bool> _resolveNeedsOnboarding() async {
+    final uid = AuthService.currentUserId;
+    if (uid.isEmpty) return false;
+    if (!isSupabaseReady) return false;
+    try {
+      final remote = await ProfileApi.fetchById(uid);
+      return remote == null || remote.displayName.trim().isEmpty;
+    } catch (_) {
+      // On network failure, don't trap a returning user in onboarding —
+      // assume they're set up and let them retry from the profile tab.
+      return false;
+    }
+  }
+
   /// Side-effects that depend on having a current auth user: mirror the
   /// locally-stored onboarding data (display name + spoken language) up to
   /// the Supabase `profiles` row, then start the unread-count listener.
-  /// This is what materializes the profile right after signup — the user
-  /// chose their name and language pre-login, we push them now that we
-  /// have an auth.uid() to anchor on.
   Future<void> _hydrateAuthedSession() async {
     final uid = AuthService.currentUserId;
     if (uid.isEmpty) return;
     final profile = await UserPrefs.loadProfile();
     if (profile != null && profile.firstName.isNotEmpty) {
-      // Await this one — the user may navigate straight to the profile tab
-      // and we don't want a flash of "no row".
       await ProfileApi.upsertMyProfile(
         deviceId: uid,
         displayName: profile.firstName,
@@ -152,15 +179,19 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
         ),
       );
     }
-    // Order matters: language must be picked before the login screen so the
-    // copy on Login/Signup renders in the user's chosen language.
-    if (_needsOnboarding) {
-      return OnboardingScreen(
-        onCompleted: () => setState(() => _needsOnboarding = false),
-      );
-    }
+    // Login first. Onboarding only runs for brand-new accounts (no Supabase
+    // profile row) — returning users go straight to the shell.
     if (!_authed) {
       return const LoginScreen();
+    }
+    if (_needsOnboarding) {
+      return OnboardingScreen(
+        onCompleted: () async {
+          await _hydrateAuthedSession();
+          if (!mounted) return;
+          setState(() => _needsOnboarding = false);
+        },
+      );
     }
     return RootShell(translation: _translation);
   }
