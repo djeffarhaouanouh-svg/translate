@@ -921,8 +921,9 @@ class _AddButtonState extends State<_AddButton>
   }
 }
 
-/// Circular "rewind" button — top-left of the top card. Shown only when
-/// there's a previous profile to return to.
+/// "Rewind" button — top-left of the top card. Curved U-turn arrow,
+/// styled like the Chercher / Filtres pills in the header (same gray
+/// background, same height). Shown only when there's a previous profile.
 class _BackButton extends StatelessWidget {
   const _BackButton({required this.onTap});
   final VoidCallback onTap;
@@ -930,18 +931,20 @@ class _BackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.45),
-      shape: const CircleBorder(),
+      color: WhatsAppCallTheme.bar,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
       child: InkWell(
-        customBorder: const CircleBorder(),
+        borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: const SizedBox(
-          width: 40,
-          height: 40,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Icon(
-            Icons.arrow_back_ios_new,
-            color: Colors.white,
+            Icons.replay,
             size: 18,
+            color: WhatsAppCallTheme.subtleText,
           ),
         ),
       ),
