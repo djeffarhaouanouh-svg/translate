@@ -81,9 +81,11 @@ abstract final class IncomingCallApi {
           })
           .select('id')
           .single();
-      return Map<String, dynamic>.from(inserted)['id']?.toString();
+      final id = Map<String, dynamic>.from(inserted)['id']?.toString();
+      debugPrint('[ring] inserted incoming_call id=$id callee=$calleeId');
+      return id;
     } catch (e) {
-      debugPrint('IncomingCallApi.ring failed: $e');
+      debugPrint('[ring] FAILED: $e');
       return null;
     }
   }
@@ -106,6 +108,7 @@ abstract final class IncomingCallApi {
     required String calleeId,
     required void Function(IncomingCall) onCall,
   }) {
+    debugPrint('[ring] subscribing as callee=$calleeId');
     final channel = _c.channel('incoming_calls:$calleeId').onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
@@ -116,11 +119,14 @@ abstract final class IncomingCallApi {
             value: calleeId,
           ),
           callback: (payload) {
+            debugPrint('[ring] received realtime insert: ${payload.newRecord}');
             final row = payload.newRecord;
             onCall(IncomingCall.fromMap(Map<String, dynamic>.from(row)));
           },
         );
-    channel.subscribe();
+    channel.subscribe((status, error) {
+      debugPrint('[ring] channel status=$status err=$error');
+    });
     return channel;
   }
 }
