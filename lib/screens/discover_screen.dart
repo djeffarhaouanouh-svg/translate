@@ -376,9 +376,30 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                           child: CircularProgressIndicator(
                               color: WhatsAppCallTheme.accent),
                         )
-                      : _topIndex >= _profiles.length
-                          ? _Empty(onReset: () => _reset())
-                          : _buildStack(),
+                      : RefreshIndicator(
+                          color: WhatsAppCallTheme.accent,
+                          backgroundColor: WhatsAppCallTheme.bar,
+                          // Pull down anywhere on the cards area to re-pull
+                          // the Supabase feed (picks up freshly-uploaded
+                          // discover photos / new users without restart).
+                          onRefresh: _reset,
+                          child: _topIndex >= _profiles.length
+                              ? ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  children: [
+                                    SizedBox(
+                                      height: MediaQuery.of(context)
+                                              .size
+                                              .height *
+                                          0.6,
+                                      child: _Empty(
+                                          onReset: () => _reset()),
+                                    ),
+                                  ],
+                                )
+                              : _buildStack(),
+                        ),
                 ),
                 // Spacer for the floating bottom nav.
                 SizedBox(
