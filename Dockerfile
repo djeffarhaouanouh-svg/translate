@@ -18,6 +18,7 @@ RUN flutter pub get
 COPY analysis_options.yaml ./
 COPY lib ./lib
 COPY web ./web
+COPY assets ./assets
 
 # Pick whichever set the user has defined in Railway, preferring the plain
 # SUPABASE_* names. Fail loudly if both are empty so the build doesn't
