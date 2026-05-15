@@ -10,7 +10,8 @@ class DiscoverScreen extends StatefulWidget {
   State<DiscoverScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+class _DiscoverScreenState extends State<DiscoverScreen>
+    with SingleTickerProviderStateMixin {
   static const _profiles = <_DemoProfile>[
     _DemoProfile(name: 'Alex', age: 24, flag: '🇫🇷', bio: "Sport, voyages, café le matin."),
     _DemoProfile(name: 'Mateo', age: 26, flag: '🇪🇸', bio: "Surf, photo argentique, vinyles."),
@@ -20,17 +21,92 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   ];
 
   int _topIndex = 0;
-  final Set<String> _liked = <String>{};
+
+  // Drag state for the top card.
+  Offset _drag = Offset.zero;
+  Size _cardSize = Size.zero;
+  late final AnimationController _ctrl;
+  Offset _animFrom = Offset.zero;
+  Offset _animTo = Offset.zero;
+  bool _isFlying = false; // true => on completion, advance the index
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    )
+      ..addListener(() {
+        final t = Curves.easeOutCubic.transform(_ctrl.value);
+        setState(() => _drag = Offset.lerp(_animFrom, _animTo, t)!);
+      })
+      ..addStatusListener((s) {
+        if (s != AnimationStatus.completed) return;
+        if (_isFlying) {
+          setState(() {
+            _topIndex += 1;
+            _drag = Offset.zero;
+            _isFlying = false;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onPanStart(DragStartDetails _) {
+    if (_ctrl.isAnimating) {
+      _ctrl.stop();
+      if (_isFlying) {
+        _topIndex += 1;
+        _isFlying = false;
+        _drag = Offset.zero;
+      }
+    }
+  }
+
+  void _onPanUpdate(DragUpdateDetails d) {
+    setState(() => _drag += d.delta);
+  }
+
+  void _onPanEnd(DragEndDetails d) {
+    final w = _cardSize.width;
+    final vx = d.velocity.pixelsPerSecond.dx;
+    // Trigger if dragged ~25% of the card OR flicked fast enough.
+    final triggered = (w > 0 && _drag.dx.abs() > w * 0.25) || vx.abs() > 500;
+    if (triggered) {
+      _flyOff(vx.abs() > 500 ? (vx >= 0 ? 1 : -1) : (_drag.dx >= 0 ? 1 : -1));
+    } else {
+      _springBack();
+    }
+  }
+
+  void _flyOff(int direction) {
+    _animFrom = _drag;
+    _animTo = Offset(direction * (_cardSize.width + 200), _drag.dy + 80);
+    _isFlying = true;
+    _ctrl
+      ..duration = const Duration(milliseconds: 240)
+      ..forward(from: 0);
+  }
+
+  void _springBack() {
+    _animFrom = _drag;
+    _animTo = Offset.zero;
+    _isFlying = false;
+    _ctrl
+      ..duration = const Duration(milliseconds: 220)
+      ..forward(from: 0);
+  }
 
   void _advance() {
     if (_topIndex >= _profiles.length) return;
     setState(() => _topIndex += 1);
-  }
-
-  void _toggleLike(String name) {
-    setState(() {
-      if (!_liked.add(name)) _liked.remove(name);
-    });
   }
 
   void _sendHello(String name) {
@@ -72,41 +148,57 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget _buildStack() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Up to 2 background cards, drawn first (bottom of z-order).
-          for (int depth = 2; depth >= 1; depth--)
-            if (_topIndex + depth < _profiles.length)
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          _cardSize = Size(constraints.maxWidth, constraints.maxHeight);
+          final w = _cardSize.width;
+          final rotation = w == 0 ? 0.0 : (_drag.dx / w) * 0.25;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Up to 2 background cards, drawn first (bottom of z-order).
+              for (int depth = 2; depth >= 1; depth--)
+                if (_topIndex + depth < _profiles.length)
+                  Positioned.fill(
+                    child: Transform.translate(
+                      offset: Offset(0, depth * 14.0),
+                      child: Transform.scale(
+                        scale: 1 - depth * 0.05,
+                        child: IgnorePointer(
+                          child: _ProfileCard(
+                            profile: _profiles[_topIndex + depth],
+                            onAdd: () {},
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              // Top card — draggable horizontally. GestureDetector wraps the
+              // Transform-displaced card so the hit area follows the visual.
               Positioned.fill(
                 child: Transform.translate(
-                  offset: Offset(0, depth * 14.0),
-                  child: Transform.scale(
-                    scale: 1 - depth * 0.05,
-                    child: IgnorePointer(
+                  offset: _drag,
+                  child: Transform.rotate(
+                    angle: rotation,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanStart: _onPanStart,
+                      onPanUpdate: _onPanUpdate,
+                      onPanEnd: _onPanEnd,
                       child: _ProfileCard(
-                        profile: _profiles[_topIndex + depth],
-                        liked: false,
-                        onAdd: () {},
-                        onToggleLike: () {},
+                        profile: _profiles[_topIndex],
+                        onAdd: () {
+                          _sendHello(_profiles[_topIndex].name);
+                          _advance();
+                        },
                       ),
                     ),
                   ),
                 ),
               ),
-          // Top card — no swipe. Use the Ajouter / heart buttons to advance.
-          Positioned.fill(
-            child: _ProfileCard(
-              profile: _profiles[_topIndex],
-              liked: _liked.contains(_profiles[_topIndex].name),
-              onAdd: () {
-                _sendHello(_profiles[_topIndex].name);
-                _advance();
-              },
-              onToggleLike: () => _toggleLike(_profiles[_topIndex].name),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -177,15 +269,11 @@ class _DiscoverHeader extends StatelessWidget {
 class _ProfileCard extends StatelessWidget {
   const _ProfileCard({
     required this.profile,
-    required this.liked,
     required this.onAdd,
-    required this.onToggleLike,
   });
 
   final _DemoProfile profile;
-  final bool liked;
   final VoidCallback onAdd;
-  final VoidCallback onToggleLike;
 
   @override
   Widget build(BuildContext context) {
@@ -272,12 +360,9 @@ class _ProfileCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    _AddButton(onTap: onAdd),
-                    const Spacer(),
-                    _LikeHeart(liked: liked, onTap: onToggleLike),
-                  ],
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _AddButton(onTap: onAdd),
                 ),
               ],
             ),
@@ -377,39 +462,6 @@ class _AddButtonState extends State<_AddButton>
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LikeHeart extends StatelessWidget {
-  const _LikeHeart({required this.liked, required this.onTap});
-  final bool liked;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const red = Color(0xFFFF3B5C);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: liked ? red.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.35),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: liked ? red : Colors.white.withValues(alpha: 0.20),
-            width: liked ? 2 : 1,
-          ),
-        ),
-        child: Icon(
-          liked ? Icons.favorite : Icons.favorite_border,
-          size: liked ? 28 : 24,
-          color: liked ? red : Colors.white,
         ),
       ),
     );
