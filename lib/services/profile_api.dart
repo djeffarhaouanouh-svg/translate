@@ -432,11 +432,12 @@ abstract final class ProfileApi {
     }
   }
 
-  /// Drop the user's Discover photo: clear the column on profiles AND
-  /// remove both common file extensions from storage so a re-upload of
-  /// the opposite extension doesn't leave the old one orphaned. Failures
-  /// on storage cleanup are swallowed — the DB row clear is what matters
-  /// for the visible UI; storage detritus is at worst a few KB.
+  /// Drop the user's Discover photo: clear the column on profiles, wipe
+  /// every "like" row pointing at this user (the likes were earned on
+  /// the photo that's now gone), AND remove both common file extensions
+  /// from storage so a re-upload of the opposite extension doesn't leave
+  /// the old one orphaned. Storage cleanup failures are swallowed —
+  /// they're at worst a few KB of orphan files.
   static Future<void> deleteMyDiscoverPhoto(String userId) async {
     if (!isSupabaseReady || userId.isEmpty) return;
     try {
@@ -447,6 +448,14 @@ abstract final class ProfileApi {
     } catch (e) {
       debugPrint('ProfileApi.deleteMyDiscoverPhoto: DB update failed: $e');
       rethrow;
+    }
+    // Wipe likes received: they were given for a photo that no longer
+    // exists. Counter on the profile resets to 0 immediately.
+    try {
+      await _c.from('likes').delete().eq('liked', userId);
+    } catch (e) {
+      debugPrint(
+          'ProfileApi.deleteMyDiscoverPhoto: likes cleanup failed: $e');
     }
     try {
       await _c.storage.from('avatars').remove([
@@ -459,10 +468,10 @@ abstract final class ProfileApi {
   }
 
   /// People to surface on the Discover stack. Excludes the caller and
-  /// anyone the caller has blocked / who has blocked the caller. Friends
-  /// are still included — the user explicitly wants to keep seeing them
-  /// in Discover (they may want to call again from there). Sorted by
-  /// most-recently-updated profile first.
+  /// anyone the caller has blocked / who has blocked the caller, AND
+  /// anyone who hasn't uploaded a Discover photo yet (no card to show).
+  /// Friends are still included — the user explicitly wants to keep
+  /// seeing them in Discover. Sorted most-recently-updated first.
   static Future<List<RemoteProfile>> fetchDiscoverFeed({
     required String myId,
     int limit = 50,
@@ -473,6 +482,7 @@ abstract final class ProfileApi {
           .from('profiles')
           .select()
           .neq('id', myId)
+          .neq('discover_photo_url', '')
           .order('updated_at', ascending: false)
           .limit(limit);
       final candidates = (rows as List)
