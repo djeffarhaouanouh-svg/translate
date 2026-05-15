@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
@@ -30,6 +31,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   List<IncomingFriendRequest> _incoming = const [];
   bool _searching = false;
   String? _error;
+  RealtimeChannel? _friendshipsChannel;
 
   @override
   void initState() {
@@ -50,6 +52,10 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _queryCtrl.dispose();
+    final ch = _friendshipsChannel;
+    if (ch != null) {
+      unawaited(Supabase.instance.client.removeChannel(ch));
+    }
     super.dispose();
   }
 
@@ -58,6 +64,18 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     if (!mounted) return;
     setState(() => _myId = id);
     await _refreshFriendships();
+    // Live-refresh the inbox + friends list whenever any friendships row
+    // changes anywhere — RLS filters what we can see, so this picks up
+    // new incoming requests addressed to me without waiting on a tab
+    // open or app resume.
+    if (isSupabaseReady && id.isNotEmpty) {
+      _friendshipsChannel = FriendshipApi.subscribeMine(
+        userId: id,
+        onChange: () {
+          if (mounted) _refreshFriendships();
+        },
+      );
+    }
   }
 
   Future<void> _refreshFriendships() async {

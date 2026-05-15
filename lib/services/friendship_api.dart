@@ -47,6 +47,32 @@ class Friendship {
 abstract final class FriendshipApi {
   static SupabaseClient get _c => Supabase.instance.client;
 
+  /// Realtime listener for friendship rows that involve [userId] (either
+  /// as requester or addressee). Fires on every INSERT/UPDATE so the
+  /// caller can refresh their friend list / incoming-requests inbox
+  /// without waiting for a tab open or app resume. Returns the channel
+  /// so callers can `removeChannel` it on dispose.
+  static RealtimeChannel subscribeMine({
+    required String userId,
+    required void Function() onChange,
+  }) {
+    final channel = _c
+        .channel('friendships:$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'friendships',
+          callback: (payload) {
+            // The filter is server-side via the .or below would only
+            // accept one column per filter. Easier to re-fetch on every
+            // friendship change and let RLS filter what we can see.
+            onChange();
+          },
+        );
+    channel.subscribe();
+    return channel;
+  }
+
   /// Pending invitations addressed TO me, hydrated with the requester's
   /// profile so the UI can render avatar + name without a second query.
   static Future<List<IncomingFriendRequest>> fetchIncomingPendingWithProfiles(
