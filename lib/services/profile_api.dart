@@ -18,6 +18,7 @@ class RemoteProfile {
     required this.avatarUrl,
     this.discoverPhotoUrl = '',
     this.bio = '',
+    this.hideOnlineStatus = false,
     this.isPro = false,
     this.creditsSeconds = freeWeeklyCreditsSeconds,
     this.creditsResetAt,
@@ -40,6 +41,11 @@ class RemoteProfile {
   /// Free-form short tagline shown on the user's own profile and on their
   /// Discover card. Capped at [profileBioMaxLength] characters.
   final String bio;
+
+  /// When true, other clients should not show this user as online or render
+  /// their "last seen" timestamp. Source of truth lives on the server so it
+  /// can't be bypassed by a tampered client.
+  final bool hideOnlineStatus;
 
   /// Subscription state. `true` while the user has an active Premium
   /// entitlement (validated against the store IAP receipt server-side, later).
@@ -88,6 +94,7 @@ class RemoteProfile {
         avatarUrl: m['avatar_url']?.toString() ?? '',
         discoverPhotoUrl: m['discover_photo_url']?.toString() ?? '',
         bio: m['bio']?.toString() ?? '',
+        hideOnlineStatus: m['hide_online_status'] == true,
         isPro: m['is_pro'] == true,
         creditsSeconds:
             _parseInt(m['credits_seconds'], freeWeeklyCreditsSeconds),
@@ -337,6 +344,7 @@ abstract final class ProfileApi {
       avatarUrl: p.avatarUrl,
       discoverPhotoUrl: p.discoverPhotoUrl,
       bio: p.bio,
+      hideOnlineStatus: p.hideOnlineStatus,
       isPro: p.isPro,
       creditsSeconds: allotment,
       creditsResetAt: nextReset.toLocal(),
@@ -401,6 +409,26 @@ abstract final class ProfileApi {
     } catch (e) {
       debugPrint('ProfileApi.updateMyBio failed: $e');
       return null;
+    }
+  }
+
+  /// Toggle the privacy bit that hides this user's online presence from
+  /// other clients. Returns true on success so the caller can keep the
+  /// optimistic UI in sync if the request failed.
+  static Future<bool> updateHideOnlineStatus({
+    required String userId,
+    required bool hide,
+  }) async {
+    if (!isSupabaseReady || userId.isEmpty) return false;
+    try {
+      await _c.from('profiles').update({
+        'hide_online_status': hide,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', userId);
+      return true;
+    } catch (e) {
+      debugPrint('ProfileApi.updateHideOnlineStatus failed: $e');
+      return false;
     }
   }
 

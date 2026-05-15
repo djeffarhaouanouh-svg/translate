@@ -3,9 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_strings.dart';
 import '../services/auth_service.dart';
+import '../services/block_api.dart';
 import '../services/device_id.dart';
 import '../services/profile_api.dart';
+import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
+import '../widgets/profile_avatar.dart';
 import 'onboarding_screen.dart';
 
 /// Hosts every secondary account-level action that doesn't belong on the
@@ -55,10 +58,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _push = p.getBool(_kPush) ?? true;
       _sounds = p.getBool(_kSounds) ?? true;
       _inAppSounds = p.getBool(_kInAppSounds) ?? true;
+      // Local cache used for instant render — DB value below overrides.
       _hideOnline = p.getBool(_kHideOnline) ?? false;
       _autoTranslate = p.getBool(_kAutoTranslate) ?? false;
       _audioOutput = p.getString(_kAudioOutput) ?? 'speaker';
     });
+    // Pull the canonical hide_online_status from Supabase so what's on
+    // screen matches what other clients see.
+    if (isSupabaseReady) {
+      try {
+        final uid = await DeviceId.getOrCreate();
+        final remote = await ProfileApi.fetchById(uid);
+        if (!mounted || remote == null) return;
+        if (remote.hideOnlineStatus != _hideOnline) {
+          setState(() => _hideOnline = remote.hideOnlineStatus);
+          await _saveBool(_kHideOnline, remote.hideOnlineStatus);
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _setHideOnline(bool value) async {
+    setState(() => _hideOnline = value);
+    await _saveBool(_kHideOnline, value);
+    final uid = await DeviceId.getOrCreate();
+    final ok = await ProfileApi.updateHideOnlineStatus(
+      userId: uid, hide: value,
+    );
+    if (!ok && mounted) {
+      // Roll back the optimistic UI if the DB write failed.
+      setState(() => _hideOnline = !value);
+      await _saveBool(_kHideOnline, !value);
+      _toast('Impossible d\'enregistrer ce paramètre.');
+    }
   }
 
   Future<void> _saveBool(String key, bool value) async {
@@ -360,10 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.visibility_off_outlined,
                   label: 'Cacher mon statut en ligne',
                   value: _hideOnline,
-                  onChanged: (v) {
-                    setState(() => _hideOnline = v);
-                    _saveBool(_kHideOnline, v);
-                  },
+                  onChanged: _setHideOnline,
                 ),
               ]),
 
@@ -667,10 +696,74 @@ class _AudioOutputOption extends StatelessWidget {
   }
 }
 
-// ───── Blocked-users sub-screen (placeholder) ───────────────────────────
+// ───── Blocked-users sub-screen ─────────────────────────────────────────
 
-class _BlockedUsersScreen extends StatelessWidget {
+class _BlockedUsersScreen extends StatefulWidget {
   const _BlockedUsersScreen();
+
+  @override
+  State<_BlockedUsersScreen> createState() => _BlockedUsersScreenState();
+}
+
+class _BlockedUsersScreenState extends State<_BlockedUsersScreen> {
+  bool _loading = true;
+  String _myId = '';
+  List<RemoteProfile> _blocked = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final uid = await DeviceId.getOrCreate();
+    final list = await BlockApi.fetchMyBlockedProfiles(uid);
+    if (!mounted) return;
+    setState(() {
+      _myId = uid;
+      _blocked = list;
+      _loading = false;
+    });
+  }
+
+  Future<void> _unblock(RemoteProfile p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WhatsAppCallTheme.bar,
+        title: Text('Débloquer ${p.displayName} ?',
+            style: const TextStyle(color: WhatsAppCallTheme.strongText)),
+        content: const Text(
+          'Cette personne pourra à nouveau te trouver, te contacter et voir tes messages.',
+          style: TextStyle(color: WhatsAppCallTheme.subtleText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(AppStrings.t('cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: WhatsAppCallTheme.accent),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Débloquer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await BlockApi.unblock(blockerId: _myId, blockedId: p.id);
+      if (!mounted) return;
+      setState(() => _blocked = _blocked.where((b) => b.id != p.id).toList());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -685,35 +778,114 @@ class _BlockedUsersScreen extends StatelessWidget {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
       ),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.block,
-                  size: 56, color: WhatsAppCallTheme.subtleText),
-              SizedBox(height: 14),
-              Text(
-                'Aucun utilisateur bloqué',
-                style: TextStyle(
-                  color: WhatsAppCallTheme.strongText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(
+                  color: WhatsAppCallTheme.accent),
+            )
+          : _blocked.isEmpty
+              ? const _BlockedEmptyState()
+              : RefreshIndicator(
+                  color: WhatsAppCallTheme.accent,
+                  backgroundColor: WhatsAppCallTheme.bar,
+                  onRefresh: _load,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    itemCount: _blocked.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final p = _blocked[i];
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: WhatsAppCallTheme.bar,
+                          borderRadius: BorderRadius.circular(14),
+                          border:
+                              Border.all(color: const Color(0xFF2A3942)),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        child: Row(
+                          children: [
+                            ProfileAvatar(
+                              displayName: p.displayName,
+                              avatarUrl: p.avatarUrl,
+                              avatarColorHex: p.avatarColor,
+                              size: 40,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    p.displayName.isEmpty ? '—' : p.displayName,
+                                    style: const TextStyle(
+                                      color: WhatsAppCallTheme.strongText,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (p.handle.isNotEmpty)
+                                    Text(
+                                      '@${p.handle}',
+                                      style: const TextStyle(
+                                        color: WhatsAppCallTheme.subtleText,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => _unblock(p),
+                              child: const Text(
+                                'Débloquer',
+                                style: TextStyle(
+                                    color: WhatsAppCallTheme.accent),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
+    );
+  }
+}
+
+class _BlockedEmptyState extends StatelessWidget {
+  const _BlockedEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.block, size: 56, color: WhatsAppCallTheme.subtleText),
+            SizedBox(height: 14),
+            Text(
+              'Aucun utilisateur bloqué',
+              style: TextStyle(
+                color: WhatsAppCallTheme.strongText,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
-              SizedBox(height: 6),
-              Text(
-                'Tu pourras bloquer un profil depuis sa fiche ou un fil de discussion.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: WhatsAppCallTheme.subtleText,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Bloque un profil depuis le menu d\'une discussion.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: WhatsAppCallTheme.subtleText,
+                fontSize: 13,
+                height: 1.4,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

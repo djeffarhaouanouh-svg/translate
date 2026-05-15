@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/block_api.dart';
 import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
@@ -58,6 +59,65 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _autoTranslate = false;
   final Map<String, String> _translations = {};
   final Set<String> _translatingIds = {};
+
+  /// Cached "have I blocked this peer" flag — refreshed on bootstrap and
+  /// after every block / unblock toggle. Drives the menu label.
+  bool _peerBlocked = false;
+
+  Future<void> _toggleBlockPeer() async {
+    if (_myId.isEmpty || widget.peerDeviceId.isEmpty) return;
+    final wasBlocked = _peerBlocked;
+    final peerName = _peer?.displayName.isNotEmpty == true
+        ? _peer!.displayName
+        : widget.title;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WhatsAppCallTheme.bar,
+        title: Text(
+          wasBlocked ? 'Débloquer $peerName ?' : 'Bloquer $peerName ?',
+          style: const TextStyle(color: WhatsAppCallTheme.strongText),
+        ),
+        content: Text(
+          wasBlocked
+              ? 'Cette personne pourra à nouveau te trouver, te contacter et voir tes messages.'
+              : 'Cette personne ne pourra plus te trouver, te contacter ni t\'appeler. Tu peux annuler à tout moment depuis Paramètres → Bloqués.',
+          style: const TextStyle(color: WhatsAppCallTheme.subtleText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: wasBlocked
+                  ? WhatsAppCallTheme.accent
+                  : const Color(0xFFE53935),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(wasBlocked ? 'Débloquer' : 'Bloquer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      if (wasBlocked) {
+        await BlockApi.unblock(
+            blockerId: _myId, blockedId: widget.peerDeviceId);
+      } else {
+        await BlockApi.block(
+            blockerId: _myId, blockedId: widget.peerDeviceId);
+      }
+      if (!mounted) return;
+      setState(() => _peerBlocked = !wasBlocked);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+    }
+  }
 
   @override
   void initState() {
@@ -132,12 +192,18 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final peer = isSupabaseReady
         ? await ProfileApi.fetchById(widget.peerDeviceId)
         : null;
+    final blocked = isSupabaseReady && id.isNotEmpty
+        ? await BlockApi.isBlocked(
+            blockerId: id, otherId: widget.peerDeviceId,
+          )
+        : false;
     if (!mounted) return;
     setState(() {
       _myId = id;
       _myName = profile?.firstName.trim() ?? '';
       _myLang = profile?.sourceLang.trim() ?? '';
       _peer = peer;
+      _peerBlocked = blocked;
     });
 
     if (!isSupabaseReady) {
@@ -220,6 +286,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           peerDeviceId: widget.peerDeviceId,
           translation: widget.translation,
         ),
+        peerBlocked: _peerBlocked,
+        onToggleBlock: _toggleBlockPeer,
       ),
       body: Column(
         children: [
@@ -278,12 +346,16 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.autoTranslate,
     required this.onToggleTranslate,
     required this.onCall,
+    required this.peerBlocked,
+    required this.onToggleBlock,
   });
   final String title;
   final RemoteProfile? peer;
   final bool autoTranslate;
   final VoidCallback onToggleTranslate;
   final VoidCallback onCall;
+  final bool peerBlocked;
+  final VoidCallback onToggleBlock;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -343,6 +415,39 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Appel vidéo',
           onPressed: onCall,
           icon: const Icon(Icons.videocam_outlined),
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'Plus',
+          icon: const Icon(Icons.more_vert),
+          color: WhatsAppCallTheme.bar,
+          onSelected: (value) {
+            if (value == 'block') onToggleBlock();
+          },
+          itemBuilder: (ctx) => [
+            PopupMenuItem<String>(
+              value: 'block',
+              child: Row(
+                children: [
+                  Icon(
+                    peerBlocked ? Icons.lock_open : Icons.block,
+                    size: 18,
+                    color: peerBlocked
+                        ? WhatsAppCallTheme.accent
+                        : const Color(0xFFE53935),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    peerBlocked ? 'Débloquer' : 'Bloquer',
+                    style: TextStyle(
+                      color: peerBlocked
+                          ? WhatsAppCallTheme.accent
+                          : const Color(0xFFE53935),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(width: 4),
       ],
