@@ -22,13 +22,15 @@ class RootShell extends StatefulWidget {
 }
 
 class _RootShellState extends State<RootShell> {
-  /// Default tab — Chat now hosts the friends list + call entry point.
+  /// Default tab — Discover (now at index 1, swapped with Chat).
   static const _mainIndex = 1;
   int _index = _mainIndex;
 
+  // Order: Chat (0), Discover (1), Profile (2). Discover is the default
+  // landing tab; Chat hosts the friends list + call entry point.
   late final List<Widget> _pages = <Widget>[
-    const DiscoverScreen(),
     ChatScreen(translation: widget.translation),
+    const DiscoverScreen(),
     const ProfileScreen(),
   ];
 
@@ -53,8 +55,8 @@ class _RootShellState extends State<RootShell> {
                     unreadChat: unread,
                     onSelect: (i) {
                       setState(() => _index = i);
-                      // Chat is now index 1 (Appel removed).
-                      if (i == 1) ChatUnread.markAllSeen();
+                      // Chat is at index 0 now (swapped with Discover).
+                      if (i == 0) ChatUnread.markAllSeen();
                     },
                   ),
                 ),
@@ -86,15 +88,15 @@ class _GlassNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = <_NavItemData>[
       _NavItemData(
-        icon: Icons.local_fire_department_outlined,
-        selectedIcon: Icons.local_fire_department,
-        label: AppStrings.t('nav_search'),
-      ),
-      _NavItemData(
         icon: Icons.chat_bubble_outline,
         selectedIcon: Icons.chat_bubble,
         label: AppStrings.t('nav_chat'),
         badge: unreadChat,
+      ),
+      _NavItemData(
+        icon: Icons.search,
+        selectedIcon: Icons.manage_search,
+        label: AppStrings.t('nav_search'),
       ),
       _NavItemData(
         icon: Icons.person_outline,
