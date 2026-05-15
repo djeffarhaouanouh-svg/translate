@@ -381,30 +381,23 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                 children: [
-                  _ProfileHeader(
+                  _IdentitySection(
                     displayName: _displayName.isEmpty
                         ? AppStrings.t('profile_anonymous')
                         : _displayName,
                     handle: _handle,
                     avatarColorHex: _remote?.avatarColor,
                     avatarUrl: _remote?.avatarUrl,
-                    onTapAvatar: _pickAndUploadAvatar,
-                  ),
-                  const SizedBox(height: 20),
-                  _StatsRow(
+                    bio: _remote?.bio ?? '',
                     counts: _counts,
+                    discoverPhotoUrl: _remote?.discoverPhotoUrl ?? '',
+                    onTapAvatar: _pickAndUploadAvatar,
+                    onEditBio: _saveBio,
                     onTapFollowers: () => _openFriendsList(FriendDirection.followers),
                     onTapFollowing: () => _openFriendsList(FriendDirection.following),
-                  ),
-                  const SizedBox(height: 20),
-                  _BioCard(
-                    bio: _remote?.bio ?? '',
-                    onSave: _saveBio,
-                  ),
-                  const SizedBox(height: 16),
-                  _DiscoverPhotoCard(
-                    photoUrl: _remote?.discoverPhotoUrl ?? '',
-                    onPick: _pickAndUploadDiscoverPhoto,
+                    onPickDiscoverPhoto: _pickAndUploadDiscoverPhoto,
+                    onEdit: _openEditor,
+                    onSettings: _openSettings,
                   ),
                   const SizedBox(height: 20),
                   _CreditsCard(
@@ -413,200 +406,10 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                         ? _upgradeToPremium
                         : null,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   _LanguageCard(language: lang),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _openEditor,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: Text(AppStrings.t('profile_edit')),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: WhatsAppCallTheme.accent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _openSettings,
-                    icon: const Icon(Icons.settings_outlined,
-                        color: WhatsAppCallTheme.subtleText),
-                    label: const Text(
-                      'Paramètres',
-                      style: TextStyle(color: WhatsAppCallTheme.subtleText),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF2A3942)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
                 ],
               ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({
-    required this.displayName,
-    required this.handle,
-    required this.avatarColorHex,
-    required this.avatarUrl,
-    required this.onTapAvatar,
-  });
-
-  final String displayName;
-  final String handle;
-  final String? avatarColorHex;
-  final String? avatarUrl;
-  final VoidCallback onTapAvatar;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Stack(
-          alignment: Alignment.bottomRight,
-          children: [
-            ProfileAvatar(
-              displayName: displayName,
-              avatarUrl: avatarUrl,
-              avatarColorHex: avatarColorHex,
-              size: 84,
-              fontSize: 36,
-              onTap: onTapAvatar,
-            ),
-            Container(
-              width: 26,
-              height: 26,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: WhatsAppCallTheme.accent,
-                shape: BoxShape.circle,
-                border: Border.all(color: WhatsAppCallTheme.scaffold, width: 2),
-              ),
-              child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
-            ),
-          ],
-        ),
-        const SizedBox(width: 18),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: WhatsAppCallTheme.strongText,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                handle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: WhatsAppCallTheme.subtleText,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatsRow extends StatelessWidget {
-  const _StatsRow({
-    required this.counts,
-    required this.onTapFollowers,
-    required this.onTapFollowing,
-  });
-  final FriendshipCounts counts;
-  final VoidCallback onTapFollowers;
-  final VoidCallback onTapFollowing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: WhatsAppCallTheme.bar,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A3942)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Row(
-        children: [
-          Expanded(
-            child: _StatCell(
-              value: counts.followers,
-              label: AppStrings.t('profile_followers'),
-              onTap: onTapFollowers,
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 40,
-            color: const Color(0xFF2A3942),
-          ),
-          Expanded(
-            child: _StatCell(
-              value: counts.following,
-              label: AppStrings.t('profile_following'),
-              onTap: onTapFollowing,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCell extends StatelessWidget {
-  const _StatCell({
-    required this.value,
-    required this.label,
-    required this.onTap,
-  });
-  final int value;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$value',
-              style: const TextStyle(
-                color: WhatsAppCallTheme.strongText,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                color: WhatsAppCallTheme.subtleText,
-                fontSize: 13,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -846,113 +649,47 @@ class _LanguageCard extends StatelessWidget {
   }
 }
 
-/// Single Discover-card photo. Tap → opens the gallery picker, uploads via
-/// [ProfileApi.uploadDiscoverPhoto] (Supabase storage `avatars/discover/`).
-/// Empty state shows a dashed placeholder with an Add Photo affordance.
-class _DiscoverPhotoCard extends StatelessWidget {
-  const _DiscoverPhotoCard({required this.photoUrl, required this.onPick});
+/// Insta-style identity section: avatar with camera badge on the left,
+/// followers/following counts inline on the right; below, the display name,
+/// handle, bio (tap-to-edit) and a compact Discover photo preview, then a
+/// row with Edit and Settings buttons. Replaces the previous bunch of
+/// separate stacked cards (header / stats / bio / discover photo / buttons).
+class _IdentitySection extends StatelessWidget {
+  const _IdentitySection({
+    required this.displayName,
+    required this.handle,
+    required this.avatarColorHex,
+    required this.avatarUrl,
+    required this.bio,
+    required this.counts,
+    required this.discoverPhotoUrl,
+    required this.onTapAvatar,
+    required this.onEditBio,
+    required this.onTapFollowers,
+    required this.onTapFollowing,
+    required this.onPickDiscoverPhoto,
+    required this.onEdit,
+    required this.onSettings,
+  });
 
-  final String photoUrl;
-  final VoidCallback onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final has = photoUrl.isNotEmpty;
-    // Centred portrait preview — ~160 wide × 200 tall (4:5, the Discover
-    // card aspect). Compact but recognisable as "what your card looks like".
-    return Center(
-      child: SizedBox(
-        width: 160,
-        child: AspectRatio(
-          aspectRatio: 4 / 5,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: onPick,
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: WhatsAppCallTheme.bar,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: has
-                      ? const Color(0xFF2A3942)
-                      : WhatsAppCallTheme.accent.withValues(alpha: 0.5),
-                  width: has ? 1 : 1.5,
-                ),
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (has)
-                    Image.network(
-                      photoUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const _PhotoEmptyState(),
-                    )
-                  else
-                    const _PhotoEmptyState(),
-                  if (has)
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.edit,
-                            size: 14, color: Colors.white),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PhotoEmptyState extends StatelessWidget {
-  const _PhotoEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.add_a_photo_outlined,
-              color: WhatsAppCallTheme.accent, size: 28),
-          SizedBox(height: 8),
-          Text(
-            'Ajouter',
-            style: TextStyle(
-              color: WhatsAppCallTheme.strongText,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Editable short tagline shown on the user's profile (and later on their
-/// Discover card). Tap → bottom sheet with a TextField (max
-/// [profileBioMaxLength] chars). Empty → placeholder hint.
-class _BioCard extends StatelessWidget {
-  const _BioCard({required this.bio, required this.onSave});
-
+  final String displayName;
+  final String handle;
+  final String? avatarColorHex;
+  final String? avatarUrl;
   final String bio;
-  final Future<void> Function(String) onSave;
+  final FriendshipCounts counts;
+  final String discoverPhotoUrl;
+  final VoidCallback onTapAvatar;
+  final Future<void> Function(String) onEditBio;
+  final VoidCallback onTapFollowers;
+  final VoidCallback onTapFollowing;
+  final VoidCallback onPickDiscoverPhoto;
+  final VoidCallback onEdit;
+  final VoidCallback onSettings;
 
-  static const _placeholder = 'Présente-toi en 2 mots ✏️';
+  static const _bioPlaceholder = 'Présente-toi en 2 mots ✏️';
 
-  Future<void> _open(BuildContext context) async {
+  Future<void> _openBioEditor(BuildContext context) async {
     final ctrl = TextEditingController(text: bio);
     final result = await showModalBottomSheet<String>(
       context: context,
@@ -963,10 +700,7 @@ class _BioCard extends StatelessWidget {
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
-          20,
-          16,
-          20,
-          16 + MediaQuery.of(ctx).viewInsets.bottom,
+          20, 16, 20, 16 + MediaQuery.of(ctx).viewInsets.bottom,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -990,7 +724,7 @@ class _BioCard extends StatelessWidget {
               cursorColor: WhatsAppCallTheme.accent,
               style: const TextStyle(color: WhatsAppCallTheme.strongText),
               decoration: const InputDecoration(
-                hintText: _placeholder,
+                hintText: _bioPlaceholder,
                 hintStyle: TextStyle(color: WhatsAppCallTheme.subtleText),
                 filled: true,
                 fillColor: WhatsAppCallTheme.scaffold,
@@ -1016,42 +750,281 @@ class _BioCard extends StatelessWidget {
     );
     ctrl.dispose();
     if (result != null && result != bio) {
-      await onSave(result);
+      await onEditBio(result);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final empty = bio.trim().isEmpty;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => _open(context),
-      child: Container(
-        decoration: BoxDecoration(
-          color: WhatsAppCallTheme.bar,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF2A3942)),
+    final emptyBio = bio.trim().isEmpty;
+    final hasPhoto = discoverPhotoUrl.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Insta-style header: avatar + stats inline.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                ProfileAvatar(
+                  displayName: displayName,
+                  avatarUrl: avatarUrl,
+                  avatarColorHex: avatarColorHex,
+                  size: 84,
+                  fontSize: 36,
+                  onTap: onTapAvatar,
+                ),
+                Container(
+                  width: 26, height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: WhatsAppCallTheme.accent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: WhatsAppCallTheme.scaffold, width: 2),
+                  ),
+                  child: const Icon(Icons.camera_alt,
+                      size: 14, color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _InlineStat(
+                    value: counts.followers,
+                    label: AppStrings.t('profile_followers'),
+                    onTap: onTapFollowers,
+                  ),
+                  _InlineStat(
+                    value: counts.following,
+                    label: AppStrings.t('profile_following'),
+                    onTap: onTapFollowing,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        child: Row(
+        const SizedBox(height: 14),
+        // Display name + handle.
+        Text(
+          displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: WhatsAppCallTheme.strongText,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          handle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: WhatsAppCallTheme.subtleText, fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Bio inline — italic placeholder when empty, normal text when set.
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _openBioEditor(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              emptyBio ? _bioPlaceholder : bio,
+              style: TextStyle(
+                color: emptyBio
+                    ? WhatsAppCallTheme.subtleText
+                    : WhatsAppCallTheme.strongText,
+                fontSize: 14,
+                height: 1.4,
+                fontStyle: emptyBio ? FontStyle.italic : FontStyle.normal,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Action buttons row — Edit + Settings inline, like Insta's Edit
+        // profile + Share profile pair.
+        Row(
           children: [
             Expanded(
-              child: Text(
-                empty ? _placeholder : bio,
-                style: TextStyle(
-                  color: empty
-                      ? WhatsAppCallTheme.subtleText
-                      : WhatsAppCallTheme.strongText,
-                  fontSize: 14,
-                  height: 1.4,
-                  fontStyle: empty ? FontStyle.italic : FontStyle.normal,
+              child: _PillButton(
+                icon: Icons.edit_outlined,
+                label: AppStrings.t('profile_edit'),
+                onTap: onEdit,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _PillButton(
+                icon: Icons.settings_outlined,
+                label: 'Paramètres',
+                onTap: onSettings,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        // Discover photo preview — small portrait tile aligned left so it
+        // reads as a "your card looks like this" thumbnail, not a separate
+        // section. Tap → gallery picker.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: 110,
+            child: AspectRatio(
+              aspectRatio: 4 / 5,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: onPickDiscoverPhoto,
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: WhatsAppCallTheme.bar,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: hasPhoto
+                          ? const Color(0xFF2A3942)
+                          : WhatsAppCallTheme.accent.withValues(alpha: 0.5),
+                      width: hasPhoto ? 1 : 1.5,
+                    ),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (hasPhoto)
+                        Image.network(
+                          discoverPhotoUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const Center(
+                            child: Icon(Icons.broken_image_outlined,
+                                color: WhatsAppCallTheme.subtleText),
+                          ),
+                        )
+                      else
+                        const Center(
+                          child: Icon(Icons.add_a_photo_outlined,
+                              color: WhatsAppCallTheme.accent, size: 24),
+                        ),
+                      if (hasPhoto)
+                        Positioned(
+                          right: 6, bottom: 6,
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit,
+                                size: 12, color: Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            const Icon(Icons.edit_outlined,
-                color: WhatsAppCallTheme.subtleText, size: 18),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InlineStat extends StatelessWidget {
+  const _InlineStat({
+    required this.value,
+    required this.label,
+    required this.onTap,
+  });
+
+  final int value;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$value',
+              style: const TextStyle(
+                color: WhatsAppCallTheme.strongText,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: WhatsAppCallTheme.subtleText,
+                fontSize: 13,
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PillButton extends StatelessWidget {
+  const _PillButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: WhatsAppCallTheme.bar,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFF2A3942)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: WhatsAppCallTheme.strongText),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: WhatsAppCallTheme.strongText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
