@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/device_id.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
+import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 
@@ -30,6 +31,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
   final _nameCtrl = TextEditingController();
+  final _bioCtrl = TextEditingController();
   String? _selectedLang;
   int _page = 0;
 
@@ -39,16 +41,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _prefill();
   }
 
+  /// Local UserPrefs first (instant), then — in editing mode — overlay with
+  /// the latest Supabase row so the field reflects what other users see, not
+  /// just what was last typed on this device.
   Future<void> _prefill() async {
     final snap = await UserPrefs.loadProfile();
-    if (!mounted || snap == null) return;
-    setState(() {
-      _nameCtrl.text = snap.firstName;
-      final stored = snap.sourceLang.trim();
-      if (stored.isNotEmpty && findLanguageByCode(stored) != null) {
-        _selectedLang = findLanguageByCode(stored)!.code;
-      }
-    });
+    if (!mounted) return;
+    if (snap != null) {
+      setState(() {
+        _nameCtrl.text = snap.firstName;
+        final stored = snap.sourceLang.trim();
+        if (stored.isNotEmpty && findLanguageByCode(stored) != null) {
+          _selectedLang = findLanguageByCode(stored)!.code;
+        }
+      });
+    }
+    if (!widget.editing || !isSupabaseReady) return;
+    try {
+      final uid = await DeviceId.getOrCreate();
+      final remote = await ProfileApi.fetchById(uid);
+      if (!mounted || remote == null) return;
+      setState(() {
+        if (remote.displayName.trim().isNotEmpty) {
+          _nameCtrl.text = remote.displayName;
+        }
+        if (remote.bio.isNotEmpty) {
+          _bioCtrl.text = remote.bio;
+        }
+        if (remote.language.trim().isNotEmpty &&
+            findLanguageByCode(remote.language) != null) {
+          _selectedLang = remote.language;
+        }
+      });
+    } catch (_) {}
   }
 
   /// Flip the UI to the newly chosen language immediately, even while the
@@ -63,6 +88,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void dispose() {
     _pageController.dispose();
     _nameCtrl.dispose();
+    _bioCtrl.dispose();
     super.dispose();
   }
 
@@ -99,6 +125,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         displayName: name,
         language: _selectedLang!,
       );
+      // Bio is only edited via this screen in editing mode (the first-run
+      // welcome flow keeps the form to name + language). Persist it
+      // separately because upsertMyProfile doesn't carry the bio column.
+      if (widget.editing) {
+        await ProfileApi.updateMyBio(
+          userId: deviceId,
+          bio: _bioCtrl.text.trim(),
+        );
+      }
     }
     if (!mounted) return;
     widget.onCompleted();
@@ -126,11 +161,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   style: const TextStyle(color: WhatsAppCallTheme.strongText),
                   decoration: InputDecoration(
                     labelText: AppStrings.t('onb_first_name_label'),
+                    // The label floats up because the controller is
+                    // pre-populated by `_prefill`; the hint is only seen on
+                    // a brand-new account that landed here directly.
                     hintText: AppStrings.t('onb_first_name_hint'),
-                    prefixIcon: const Icon(Icons.badge_outlined, color: WhatsAppCallTheme.subtleText),
+                    prefixIcon: const Icon(Icons.badge_outlined,
+                        color: WhatsAppCallTheme.subtleText),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _bioCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  maxLength: profileBioMaxLength,
+                  maxLines: 3,
+                  minLines: 2,
+                  style: const TextStyle(color: WhatsAppCallTheme.strongText),
+                  decoration: const InputDecoration(
+                    labelText: 'Bio',
+                    hintText: 'Présente-toi en 2 mots ✏️',
+                    prefixIcon: Icon(Icons.short_text,
+                        color: WhatsAppCallTheme.subtleText),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Text(
                   AppStrings.t('onb_language_picker_label'),
                   style: const TextStyle(
