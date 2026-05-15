@@ -412,115 +412,109 @@ class _DiscoverHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
-          if (!expanded) ...[
-            const Text(
-              'Discover',
-              style: TextStyle(
-                color: WhatsAppCallTheme.strongText,
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-            const Spacer(),
-          ],
-          // Search pill: compact button when collapsed, full TextField when
-          // expanded (AnimatedSize handles the width transition).
-          Expanded(
-            flex: expanded ? 1 : 0,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: WhatsAppCallTheme.bar,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              ),
-              child: Row(
-                mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
-                children: [
-                  const Icon(Icons.search,
-                      size: 16, color: WhatsAppCallTheme.subtleText),
-                  const SizedBox(width: 6),
-                  if (expanded)
-                    Expanded(
-                      child: TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        onChanged: onChanged,
-                        textInputAction: TextInputAction.search,
-                        cursorColor: WhatsAppCallTheme.accent,
-                        style: const TextStyle(
-                          color: WhatsAppCallTheme.strongText,
-                          fontSize: 13,
-                        ),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          hintText: 'Prénom de l\'ami',
-                          hintStyle: TextStyle(
-                            color: WhatsAppCallTheme.subtleText,
-                            fontSize: 13,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    )
-                  else
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onTapPill,
-                      child: const Text(
-                        'Chercher',
-                        style: TextStyle(
-                          color: WhatsAppCallTheme.subtleText,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  if (expanded)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onSubmittedClose,
-                      child: const Padding(
-                        padding: EdgeInsets.only(left: 4),
-                        child: Icon(Icons.close,
-                            size: 16, color: WhatsAppCallTheme.subtleText),
-                      ),
-                    ),
-                ],
-              ),
+          const Text(
+            'Discover',
+            style: TextStyle(
+              color: WhatsAppCallTheme.strongText,
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
             ),
           ),
-          if (!expanded) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: WhatsAppCallTheme.bar,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.tune, size: 16, color: WhatsAppCallTheme.subtleText),
-                  SizedBox(width: 6),
-                  Text(
-                    'Filtres',
-                    style: TextStyle(
-                      color: WhatsAppCallTheme.subtleText,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+          const Spacer(),
+          // Search pill: compact button when collapsed, wider TextField when
+          // expanded — but never full-width. Fixed expanded width keeps the
+          // Filtres pill visible to its right.
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            width: expanded ? 200 : null,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: WhatsAppCallTheme.bar,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+              children: [
+                const Icon(Icons.search,
+                    size: 16, color: WhatsAppCallTheme.subtleText),
+                const SizedBox(width: 6),
+                if (expanded)
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onChanged: onChanged,
+                      textInputAction: TextInputAction.search,
+                      cursorColor: WhatsAppCallTheme.accent,
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.strongText,
+                        fontSize: 13,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'Prénom de l\'ami',
+                        hintStyle: TextStyle(
+                          color: WhatsAppCallTheme.subtleText,
+                          fontSize: 13,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  )
+                else
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onTapPill,
+                    child: const Text(
+                      'Chercher',
+                      style: TextStyle(
+                        color: WhatsAppCallTheme.subtleText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ],
-              ),
+                if (expanded)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onSubmittedClose,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Icon(Icons.close,
+                          size: 16, color: WhatsAppCallTheme.subtleText),
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: WhatsAppCallTheme.bar,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.tune, size: 16, color: WhatsAppCallTheme.subtleText),
+                SizedBox(width: 6),
+                Text(
+                  'Filtres',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.subtleText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
