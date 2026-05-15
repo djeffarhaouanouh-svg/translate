@@ -432,6 +432,68 @@ abstract final class ProfileApi {
     }
   }
 
+  /// People to surface on the Discover stack. Excludes the caller, anyone
+  /// the caller has blocked / who has blocked the caller, and anyone the
+  /// caller is already friends with (those live in the Chat tab). Sorted
+  /// by most-recently-updated profile first so freshly-onboarded users
+  /// surface near the top.
+  static Future<List<RemoteProfile>> fetchDiscoverFeed({
+    required String myId,
+    int limit = 50,
+  }) async {
+    if (!isSupabaseReady || myId.isEmpty) return const [];
+    try {
+      // Pull a generous batch then filter client-side. Cheaper than three
+      // server-side joins for the number of rows we expect.
+      final rows = await _c
+          .from('profiles')
+          .select()
+          .neq('id', myId)
+          .order('updated_at', ascending: false)
+          .limit(limit);
+      final candidates = (rows as List)
+          .map((r) => RemoteProfile.fromMap(Map<String, dynamic>.from(r as Map)))
+          .toList(growable: false);
+      if (candidates.isEmpty) return const [];
+
+      final excluded = <String>{};
+      try {
+        final blocks = await _c
+            .from('blocked_users')
+            .select('blocker, blocked')
+            .or('blocker.eq.$myId,blocked.eq.$myId');
+        for (final row in (blocks as List)) {
+          final m = Map<String, dynamic>.from(row as Map);
+          final blocker = m['blocker']?.toString() ?? '';
+          final blocked = m['blocked']?.toString() ?? '';
+          if (blocker == myId && blocked.isNotEmpty) excluded.add(blocked);
+          if (blocked == myId && blocker.isNotEmpty) excluded.add(blocker);
+        }
+      } catch (_) {}
+      try {
+        final friends = await _c
+            .from('friendships')
+            .select('requester, addressee, status')
+            .or('requester.eq.$myId,addressee.eq.$myId')
+            .eq('status', 'accepted');
+        for (final row in (friends as List)) {
+          final m = Map<String, dynamic>.from(row as Map);
+          final r = m['requester']?.toString() ?? '';
+          final a = m['addressee']?.toString() ?? '';
+          if (r == myId && a.isNotEmpty) excluded.add(a);
+          if (a == myId && r.isNotEmpty) excluded.add(r);
+        }
+      } catch (_) {}
+
+      return candidates
+          .where((p) => !excluded.contains(p.id))
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('ProfileApi.fetchDiscoverFeed failed: $e');
+      return const [];
+    }
+  }
+
   /// Permanently remove the caller's profile row and any friendships they
   /// participate in. The Supabase auth.users record is **not** deleted —
   /// that requires a server-side admin call. Calling code should sign the

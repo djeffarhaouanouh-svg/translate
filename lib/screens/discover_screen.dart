@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
+import '../services/languages.dart';
 import '../services/like_api.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
+import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 
@@ -20,11 +23,11 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen>
     with SingleTickerProviderStateMixin {
-  // Demo data removed. The list will be hydrated from Supabase once the
-  // discover-feed query lands (excluding my friends, my blocks, and me).
-  // Until then the screen renders the "C'est tout pour aujourd'hui" empty
-  // state immediately.
-  static const _profiles = <_DemoProfile>[];
+  // Real Supabase profiles, hydrated from ProfileApi.fetchDiscoverFeed at
+  // bootstrap. Excludes me, anyone I've blocked / who's blocked me, and
+  // accepted friends.
+  List<RemoteProfile> _profiles = const <RemoteProfile>[];
+  bool _feedLoading = true;
 
   int _topIndex = 0;
   // Profile ids I've already liked — heart renders filled for these.
@@ -81,16 +84,23 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final id = await DeviceId.getOrCreate();
     if (!mounted) return;
     setState(() => _myId = id);
-    if (isSupabaseReady && id.isNotEmpty) {
-      try {
-        final mine = await FriendshipApi.fetchMine(id);
-        final liked = await LikeApi.fetchMyLikedIds(id);
-        if (!mounted) return;
-        setState(() {
-          _myFriendships = mine;
-          _likedIds = liked;
-        });
-      } catch (_) {}
+    if (!isSupabaseReady || id.isEmpty) {
+      setState(() => _feedLoading = false);
+      return;
+    }
+    try {
+      final mine = await FriendshipApi.fetchMine(id);
+      final liked = await LikeApi.fetchMyLikedIds(id);
+      final feed = await ProfileApi.fetchDiscoverFeed(myId: id);
+      if (!mounted) return;
+      setState(() {
+        _myFriendships = mine;
+        _likedIds = liked;
+        _profiles = feed;
+        _feedLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _feedLoading = false);
     }
   }
 
@@ -284,18 +294,62 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       ..forward(from: 0);
   }
 
-  void _sendHello(String name) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('👋 envoyé à $name'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: WhatsAppCallTheme.bar,
-      ),
-    );
+  /// Sends a "👋 Coucou !" message to the visible profile via ChatApi.
+  /// The conversation id is the same deterministic dm-{a}-{b} key the
+  /// chat list uses, so the message lands directly in their thread.
+  Future<void> _sendHello(RemoteProfile peer) async {
+    if (_myId.isEmpty || peer.id.isEmpty) return;
+    try {
+      final local = await UserPrefs.loadProfile();
+      final myProfile =
+          isSupabaseReady ? await ProfileApi.fetchById(_myId) : null;
+      final myName = (myProfile?.displayName.trim().isNotEmpty == true)
+          ? myProfile!.displayName
+          : (local?.firstName.trim() ?? '');
+      final myLang = (myProfile?.language.trim().isNotEmpty == true)
+          ? myProfile!.language
+          : (local?.sourceLang ?? '');
+      final ids = [_myId, peer.id]..sort();
+      final convId = 'dm-${ids[0]}-${ids[1]}';
+      await ChatApi.sendMessage(
+        conversationId: convId,
+        senderId: _myId,
+        senderName: myName,
+        recipientId: peer.id,
+        body: '👋 Coucou !',
+        language: myLang,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('👋 envoyé à ${peer.displayName}'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: WhatsAppCallTheme.bar,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Envoi échoué : $e')),
+      );
+    }
   }
 
-  void _reset() {
-    setState(() => _topIndex = 0);
+  Future<void> _reset() async {
+    if (_myId.isEmpty) {
+      setState(() => _topIndex = 0);
+      return;
+    }
+    setState(() {
+      _topIndex = 0;
+      _feedLoading = true;
+    });
+    final feed = await ProfileApi.fetchDiscoverFeed(myId: _myId);
+    if (!mounted) return;
+    setState(() {
+      _profiles = feed;
+      _feedLoading = false;
+    });
   }
 
   @override
@@ -317,9 +371,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   onChanged: _onSearchQueryChanged,
                 ),
                 Expanded(
-                  child: _topIndex >= _profiles.length
-                      ? _Empty(onReset: _reset)
-                      : _buildStack(),
+                  child: _feedLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: WhatsAppCallTheme.accent),
+                        )
+                      : _topIndex >= _profiles.length
+                          ? _Empty(onReset: () => _reset())
+                          : _buildStack(),
                 ),
                 // Spacer for the floating bottom nav.
                 SizedBox(
@@ -399,7 +458,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                       child: _ProfileCard(
                         profile: _profiles[_topIndex],
                         onAdd: () {
-                          _sendHello(_profiles[_topIndex].name);
+                          _sendHello(_profiles[_topIndex]);
                           _advance();
                         },
                         onBack: _topIndex > 0 ? _back : null,
@@ -417,23 +476,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       ),
     );
   }
-}
-
-class _DemoProfile {
-  const _DemoProfile({
-    required this.id,
-    required this.name,
-    required this.age,
-    required this.flag,
-    required this.bio,
-  });
-
-  /// Supabase auth.users id — used as the key for likes / blocks / chat.
-  final String id;
-  final String name;
-  final int age;
-  final String flag;
-  final String bio;
 }
 
 class _DiscoverHeader extends StatelessWidget {
@@ -768,7 +810,7 @@ class _ProfileCard extends StatelessWidget {
     this.onToggleLike,
   });
 
-  final _DemoProfile profile;
+  final RemoteProfile profile;
   final VoidCallback onAdd;
   /// When non-null, a circular back arrow is rendered at the top-left of the
   /// card. Tapping it returns to the previous profile.
@@ -780,18 +822,24 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = findLanguageByCode(profile.language);
+    final flag = lang?.flag ?? '';
+    final photoUrl = profile.discoverPhotoUrl.isNotEmpty
+        ? profile.discoverPhotoUrl
+        : profile.avatarUrl;
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
         fit: StackFit.expand,
         children: [
           const ColoredBox(color: WhatsAppCallTheme.bar),
-          Image.asset(
-            'assets/demo_profile.png',
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
+          if (photoUrl.isNotEmpty)
+            Image.network(
+              photoUrl,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -827,7 +875,9 @@ class _ProfileCard extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        profile.name,
+                        profile.displayName.isEmpty
+                            ? '—'
+                            : profile.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -838,36 +888,28 @@ class _ProfileCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '${profile.age}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w400,
-                        ),
+                    if (flag.isNotEmpty) ...[
+                      const SizedBox(width: 10),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(flag, style: const TextStyle(fontSize: 22)),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(profile.flag, style: const TextStyle(fontSize: 22)),
-                    ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  profile.bio,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 14,
-                    height: 1.35,
+                if (profile.bio.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    profile.bio,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 14,
+                      height: 1.35,
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 14),
                 Row(
                   children: [
