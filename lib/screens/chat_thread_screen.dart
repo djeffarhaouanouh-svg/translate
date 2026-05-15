@@ -575,7 +575,7 @@ class _Composer extends StatelessWidget {
                       onTap: onToggleTranslate,
                     ),
                     prefixIconConstraints: const BoxConstraints(
-                      minWidth: 76, minHeight: 32,
+                      minWidth: 96, minHeight: 40,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(22),
@@ -637,22 +637,22 @@ class _ComposerTranslateToggle extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.only(left: 8, right: 6),
+        padding: const EdgeInsets.only(left: 10, right: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.translate,
-              size: 18,
+              size: 24,
               color: active
                   ? WhatsAppCallTheme.accent
                   : WhatsAppCallTheme.subtleText,
             ),
-            const SizedBox(width: 6),
-            // Mini sliding pill — same look as the previous AppBar switch.
+            const SizedBox(width: 8),
+            // Sliding pill — bigger so it reads as a real toggle.
             Container(
-              width: 30, height: 16,
-              padding: const EdgeInsets.all(2),
+              width: 42, height: 22,
+              padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
                 color: active
                     ? WhatsAppCallTheme.accent.withValues(alpha: 0.45)
@@ -667,7 +667,7 @@ class _ComposerTranslateToggle extends StatelessWidget {
                 alignment:
                     active ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: 12, height: 12,
+                  width: 16, height: 16,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: active
@@ -678,7 +678,7 @@ class _ComposerTranslateToggle extends StatelessWidget {
                             BoxShadow(
                               color: WhatsAppCallTheme.accent
                                   .withValues(alpha: 0.55),
-                              blurRadius: 6,
+                              blurRadius: 8,
                             ),
                           ]
                         : null,
