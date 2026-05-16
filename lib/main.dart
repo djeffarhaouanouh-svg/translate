@@ -9,6 +9,7 @@ import 'screens/root_shell.dart';
 import 'services/app_strings.dart';
 import 'services/auth_service.dart';
 import 'services/chat_unread.dart';
+import 'services/notification_client.dart';
 import 'services/profile_api.dart';
 import 'services/supabase_service.dart';
 import 'services/user_prefs.dart';
@@ -146,6 +147,10 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
       );
     }
     unawaited(ChatUnread.start(uid));
+    // Best-effort: ask for notification permission + register the
+    // transport target. No-op on platforms where the stub is shipped
+    // (anything that isn't web until the native client is wired up).
+    unawaited(NotificationClient.register(uid));
   }
 
   @override

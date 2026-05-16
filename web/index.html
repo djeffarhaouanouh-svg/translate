@@ -29,6 +29,12 @@
 
   <title>livekit_translate</title>
   <link rel="manifest" href="manifest.json">
+  <!-- VAPID public key for Web Push. Paired with VAPID_PRIVATE_KEY in
+       the backend env. Generate once with:
+         npx web-push generate-vapid-keys
+       Leave empty to disable web push registration entirely (the
+       Flutter client will just no-op). -->
+  <meta name="vapid-public-key" content="">
   <style id="splash-screen-style">
     html {
       height: 100%
