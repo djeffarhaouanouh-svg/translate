@@ -494,12 +494,6 @@ class _FriendChatRow extends StatelessWidget {
                         ),
                       ),
                     ],
-                    // Decorative phone glyph (not interactive).
-                    const Padding(
-                      padding: EdgeInsets.only(right: 4),
-                      child: Icon(Icons.phone,
-                          color: WhatsAppCallTheme.subtleText, size: 18),
-                    ),
                     PopupMenuButton<String>(
                       tooltip: AppStrings.t('tooltip_more'),
                       padding: EdgeInsets.zero,
