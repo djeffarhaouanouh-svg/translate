@@ -484,8 +484,8 @@ class _CallScreenState extends State<CallScreen> {
                   // tile visible, the call (audio + translation) is still up.
                   _CameraOffTile(
                     label: peerName.isEmpty
-                        ? 'Camera off'
-                        : '$peerName · camera off',
+                        ? null
+                        : peerName.split(' ').first,
                   )
                 else
                   Container(
@@ -727,36 +727,24 @@ class _CameraOffTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconSize = compact ? 28.0 : 64.0;
-    final fontSize = compact ? 10.0 : 14.0;
+    final fontSize = compact ? 14.0 : 28.0;
     return Container(
-      color: WhatsAppCallTheme.surface,
+      color: Colors.black,
       alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.videocam_off_outlined,
-            size: iconSize,
-            color: Colors.white.withValues(alpha: 0.55),
-          ),
-          if (label != null && !compact) ...[
-            const SizedBox(height: 10),
-            Padding(
+      child: (label == null || label!.isEmpty)
+          ? null
+          : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
                 label!,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.78),
+                  color: Colors.white,
                   fontSize: fontSize,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ],
-        ],
-      ),
     );
   }
 }
