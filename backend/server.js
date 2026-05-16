@@ -256,10 +256,6 @@ app.post('/translation/realtime/session', async (req, res) => {
 
     const sessionPayload = {
       model: 'gpt-realtime-translate',
-      // OpenAI default ephemeral TTL is 60s — too short for any kind of
-      // long-running call. Bump to 30 minutes so refreshes are infrequent
-      // and a single missed refresh doesn't kill the call.
-      expires_after: { anchor: 'created_at', seconds: 1800 },
       audio: {
         ...(Object.keys(audioInput).length > 0 ? { input: audioInput } : {}),
         output: { language: tag },
@@ -280,7 +276,15 @@ app.post('/translation/realtime/session', async (req, res) => {
     try {
       parsed = JSON.parse(text);
     } catch (_) {
+      // eslint-disable-next-line no-console
+      console.error('[xlate-session] non-JSON response', r.status, text.slice(0, 300));
       return res.status(502).json({ error: 'openai_bad_response', body: text.slice(0, 200) });
+    }
+    if (r.status >= 400) {
+      // Surface the full OpenAI error body in server logs so we can see
+      // exactly why the key was rejected (revoked, quota, model mismatch…).
+      // eslint-disable-next-line no-console
+      console.error('[xlate-session] OpenAI error', r.status, JSON.stringify(parsed).slice(0, 600));
     }
     return res.status(r.status).json(parsed);
   } catch (e) {
