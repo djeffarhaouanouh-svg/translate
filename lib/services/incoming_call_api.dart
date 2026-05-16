@@ -58,18 +58,28 @@ class IncomingCall {
 abstract final class IncomingCallApi {
   static SupabaseClient get _c => Supabase.instance.client;
 
+  /// Result of [ring] — exposes the inserted row id on success and the
+  /// raw Postgres error on failure so the caller can surface it in the
+  /// UI (RLS violations, FK errors, etc. used to be lost in debug logs).
+  ///
+  /// Either [id] is non-null, or [error] is non-null. Never both.
+  static ({String? id, String? error}) _ringResult({String? id, String? error}) =>
+      (id: id, error: error);
+
   /// Inserts a fresh "ringing" row addressed to [calleeId]. The callee's
   /// realtime subscription will pick it up and show the incoming-call
-  /// modal. Returns the inserted row id (caller keeps it so they can
-  /// delete the row when they hang up before the callee accepts).
-  static Future<String?> ring({
+  /// modal. Returns the inserted row id on success, or an error string
+  /// describing why the insert failed (RLS, FK, network, …).
+  static Future<({String? id, String? error})> ring({
     required String callerId,
     required String calleeId,
     required String roomName,
   }) async {
-    if (!isSupabaseReady) return null;
+    if (!isSupabaseReady) {
+      return _ringResult(error: 'Supabase not configured');
+    }
     if (callerId.isEmpty || calleeId.isEmpty || callerId == calleeId) {
-      return null;
+      return _ringResult(error: 'Invalid caller/callee ids');
     }
     try {
       final inserted = await _c
@@ -83,24 +93,26 @@ abstract final class IncomingCallApi {
           .single();
       final id = Map<String, dynamic>.from(inserted)['id']?.toString();
       debugPrint('[ring] inserted incoming_call id=$id callee=$calleeId');
-      return id;
+      return _ringResult(id: id);
     } catch (e) {
       debugPrint('[ring] FAILED: $e');
-      return null;
+      return _ringResult(error: e.toString());
     }
   }
 
   /// One-shot lookup of every still-ringing row addressed to [calleeId].
   /// Used as a polling backup on the web build where the realtime
   /// websocket subscription isn't always reliable (browser throttling,
-  /// network hiccups).
+  /// network hiccups). Filters out historical rows (ended_at is not null)
+  /// so old calls don't keep re-triggering the modal.
   static Future<List<IncomingCall>> fetchPending(String calleeId) async {
     if (!isSupabaseReady || calleeId.isEmpty) return const [];
     try {
       final rows = await _c
           .from('incoming_calls')
           .select()
-          .eq('callee', calleeId);
+          .eq('callee', calleeId)
+          .filter('ended_at', 'is', null);
       return (rows as List)
           .map((r) => IncomingCall.fromMap(Map<String, dynamic>.from(r as Map)))
           .toList(growable: false);
@@ -110,16 +122,27 @@ abstract final class IncomingCallApi {
     }
   }
 
-  /// Removes a ringing row. Both caller (cancel before pickup) and callee
-  /// (decline / accept) are allowed by the RLS policy.
-  static Future<void> cancel({required String callId}) async {
+  /// Marks a ringing row as ended via the `end_incoming_call` RPC, which
+  /// stamps `ended_at = now()` and records the elapsed duration in
+  /// `duration_seconds`. Replaces the old hard-DELETE so the row
+  /// survives as call history.
+  ///
+  /// Both caller (cancel before pickup) and callee (decline / accept)
+  /// can call this — the SQL function does the authorisation check.
+  static Future<void> endCall({required String callId}) async {
     if (!isSupabaseReady || callId.isEmpty) return;
     try {
-      await _c.from('incoming_calls').delete().eq('id', callId);
+      await _c.rpc('end_incoming_call', params: {'p_call_id': callId});
     } catch (e) {
-      debugPrint('IncomingCallApi.cancel failed: $e');
+      debugPrint('IncomingCallApi.endCall failed: $e');
     }
   }
+
+  /// Backwards-compatible alias. The semantic shifted from "delete the
+  /// row" to "stamp ended_at" but the call sites still want a single
+  /// "ring is over" hook.
+  static Future<void> cancel({required String callId}) =>
+      endCall(callId: callId);
 
   /// Subscribe to incoming-call rows for [calleeId]. The returned channel
   /// must be `unsubscribe()`d when the listener tears down (e.g. on sign

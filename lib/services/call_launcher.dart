@@ -64,16 +64,25 @@ abstract final class CallLauncher {
         displayName: myName,
         sourceLang: mySourceLang,
       );
-      // Best-effort: fire a "ring" row so the callee's open tab gets a
-      // realtime push to show the incoming-call modal. Failure here is
-      // non-fatal — the call itself still goes through; the peer just
-      // wouldn't be notified.
-      final ringId = await IncomingCallApi.ring(
+      // Fire a "ring" row so the callee's open tab gets a realtime push
+      // to show the incoming-call modal. If this fails (RLS, FK, …) the
+      // peer would be silently not-notified — surface a snackbar so the
+      // caller knows their call isn't being announced.
+      final ring = await IncomingCallApi.ring(
         callerId: myId,
         calleeId: peerDeviceId,
         roomName: token.roomName,
       );
       if (!context.mounted) return false;
+      if (ring.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('La notif d\'appel a échoué : ${ring.error}'),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+      final ringId = ring.id;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => CallScreen(
@@ -86,10 +95,10 @@ abstract final class CallLauncher {
           ),
         ),
       );
-      // Hangup / leave call → tear down the ring row so the callee's modal
-      // doesn't keep ringing for a call that's already over on this end.
+      // Hangup / leave call → record the call's duration in-place so the
+      // row survives as history (used to be a DELETE).
       if (ringId != null) {
-        await IncomingCallApi.cancel(callId: ringId);
+        await IncomingCallApi.endCall(callId: ringId);
       }
       return true;
     } catch (e) {
