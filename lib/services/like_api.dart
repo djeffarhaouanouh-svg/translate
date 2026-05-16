@@ -110,6 +110,19 @@ abstract final class LikeApi {
     }
   }
 
+  /// Wipe every like row pointing at [userId]. Called when the user deletes
+  /// their Discover photo so the heart badge — which represents likes
+  /// received on that photo — doesn't linger over an empty cell.
+  static Future<void> deleteAllLikersOf(String userId) async {
+    if (!isSupabaseReady || userId.isEmpty) return;
+    try {
+      await _c.from('likes').delete().eq('liked', userId);
+    } catch (e) {
+      debugPrint('LikeApi.deleteAllLikersOf failed: $e');
+      rethrow;
+    }
+  }
+
   /// Quick count for the badge on the profile screen.
   static Future<int> countLikersOf(String userId) async {
     if (!isSupabaseReady || userId.isEmpty) return 0;

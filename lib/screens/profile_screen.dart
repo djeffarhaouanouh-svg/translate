@@ -485,6 +485,14 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     if (ok != true) return;
     try {
       await ProfileApi.deleteMyDiscoverPhoto(_deviceId);
+      // Cascade: likes received are tied to the (now-deleted) photo, so
+      // drop them too — otherwise the ❤ badge keeps showing on an empty
+      // cell. Best-effort; a failure here shouldn't block the deletion.
+      try {
+        await LikeApi.deleteAllLikersOf(_deviceId);
+      } catch (e) {
+        debugPrint('cascade like delete failed: $e');
+      }
       if (!mounted) return;
       await _reload();
     } catch (e) {
