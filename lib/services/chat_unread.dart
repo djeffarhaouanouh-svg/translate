@@ -13,6 +13,11 @@ abstract final class ChatUnread {
   static final ValueNotifier<int> count = ValueNotifier<int>(0);
 
   static const _seenKey = 'chat_last_seen_iso';
+  /// Prefix for per-conversation last-seen ISO timestamps. Each key looks
+  /// like `chat_conv_seen_<conversationId>` and is bumped when the user
+  /// actually opens that thread — independent from the global `_seenKey`
+  /// which only drives the chat-tab unread badge.
+  static const _convSeenPrefix = 'chat_conv_seen_';
   static StreamSubscription<List<Map<String, dynamic>>>? _sub;
   static String _meId = '';
   static String _lastSeenIso = '';
@@ -66,5 +71,35 @@ abstract final class ChatUnread {
     _sub = null;
     _meId = '';
     count.value = 0;
+  }
+
+  /// Mark conversation [convId] as seen *now*. Called when its thread is
+  /// opened so the per-row unread indicator on the chat list clears for
+  /// that specific row.
+  static Future<void> markConversationSeen(String convId) async {
+    if (convId.isEmpty) return;
+    final p = await SharedPreferences.getInstance();
+    await p.setString(
+      '$_convSeenPrefix$convId',
+      DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  /// Snapshot of every per-conversation last-seen timestamp. Returned as
+  /// a `{conversationId: DateTime}` map; conversations the user has never
+  /// opened are simply absent from the map (callers should treat that as
+  /// "everything is unread").
+  static Future<Map<String, DateTime>> readPerConversationSeen() async {
+    final p = await SharedPreferences.getInstance();
+    final out = <String, DateTime>{};
+    for (final k in p.getKeys()) {
+      if (!k.startsWith(_convSeenPrefix)) continue;
+      final iso = p.getString(k);
+      if (iso == null) continue;
+      final dt = DateTime.tryParse(iso);
+      if (dt == null) continue;
+      out[k.substring(_convSeenPrefix.length)] = dt;
+    }
+    return out;
   }
 }

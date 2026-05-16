@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/app_strings.dart';
 import '../services/block_api.dart';
 import '../services/chat_api.dart';
+import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
@@ -36,6 +37,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String _myId = '';
   List<RemoteProfile> _friends = const [];
   Map<String, ChatMessage> _latestByConv = const {};
+  Map<String, DateTime> _seenByConv = const {};
   bool _loading = true;
   String? _error;
   Timer? _pollTimer;
@@ -112,6 +114,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // to render the last-message preview and to sort rows by most-recent
       // activity (WhatsApp style).
       final latest = await ChatApi.fetchLatestPerConversation(id);
+      final seen = await ChatUnread.readPerConversationSeen();
 
       String convIdFor(String otherId) {
         final ids = [id, otherId]..sort();
@@ -136,6 +139,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _myId = id;
         _friends = friends;
         _latestByConv = latest;
+        _seenByConv = seen;
         _loading = false;
       });
     } catch (e) {
@@ -286,11 +290,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
         itemBuilder: (ctx, i) {
           final p = _friends[i];
-          final last = _latestByConv[_conversationIdFor(p.id)];
+          final convId = _conversationIdFor(p.id);
+          final last = _latestByConv[convId];
+          final lastSeen = _seenByConv[convId];
+          // "Unread" = the latest message was sent by the peer and is
+          // newer than the last time the user opened this thread (or the
+          // user has never opened the thread → all peer messages count).
+          final isUnread = last != null &&
+              last.senderId != _myId &&
+              (lastSeen == null || last.createdAt.isAfter(lastSeen));
           return _FriendChatRow(
             profile: p,
             lastMessage: last,
             isMine: last?.senderId == _myId,
+            unread: isUnread,
             onTap: () => _openThread(p),
             onViewProfile: () => _viewProfile(p),
             onBlock: () => _blockPeer(p),
@@ -306,6 +319,7 @@ class _FriendChatRow extends StatelessWidget {
     required this.profile,
     required this.lastMessage,
     required this.isMine,
+    required this.unread,
     required this.onTap,
     required this.onViewProfile,
     required this.onBlock,
@@ -313,6 +327,9 @@ class _FriendChatRow extends StatelessWidget {
   final RemoteProfile profile;
   final ChatMessage? lastMessage;
   final bool isMine;
+  /// True when the last message is from the peer and hasn't been read
+  /// yet — drives the green dot + bold name styling on the row.
+  final bool unread;
   final VoidCallback onTap;
   final VoidCallback onViewProfile;
   final VoidCallback onBlock;
@@ -391,7 +408,7 @@ class _FriendChatRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Name on its own line — no more competing with the time
-                  // for horizontal space.
+                  // for horizontal space. Bolder + brighter when unread.
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onViewProfile,
@@ -400,9 +417,10 @@ class _FriendChatRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: WhatsAppCallTheme.strongText,
-                        fontWeight: FontWeight.w600,
+                        fontWeight:
+                            unread ? FontWeight.w800 : FontWeight.w600,
                         fontSize: 17,
                       ),
                     ),
@@ -413,9 +431,13 @@ class _FriendChatRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
                     text: TextSpan(
-                      style: const TextStyle(
-                        color: WhatsAppCallTheme.subtleText,
+                      style: TextStyle(
+                        color: unread
+                            ? WhatsAppCallTheme.strongText
+                            : WhatsAppCallTheme.subtleText,
                         fontSize: 14,
+                        fontWeight:
+                            unread ? FontWeight.w600 : FontWeight.normal,
                       ),
                       children: subtitleParts,
                     ),
@@ -436,15 +458,32 @@ class _FriendChatRow extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 4, bottom: 4),
                     child: Text(
                       _formatTime(lastMessage!.createdAt),
-                      style: const TextStyle(
-                        color: WhatsAppCallTheme.subtleText,
+                      style: TextStyle(
+                        // Time turns accent-green when unread, matching
+                        // the dot below — same affordance WhatsApp uses.
+                        color: unread
+                            ? WhatsAppCallTheme.accent
+                            : WhatsAppCallTheme.subtleText,
                         fontSize: 12,
+                        fontWeight:
+                            unread ? FontWeight.w700 : FontWeight.normal,
                       ),
                     ),
                   ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (unread) ...[
+                      Container(
+                        width: 10,
+                        height: 10,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: const BoxDecoration(
+                          color: WhatsAppCallTheme.accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
                     // Decorative phone glyph (not interactive).
                     const Padding(
                       padding: EdgeInsets.only(right: 4),

@@ -6,6 +6,7 @@ import '../services/app_strings.dart';
 import '../services/block_api.dart';
 import '../services/call_launcher.dart';
 import '../services/chat_api.dart';
+import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
@@ -203,6 +204,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             blockerId: id, otherId: widget.peerDeviceId,
           )
         : false;
+    // Opening this thread = peer's messages here are now "seen". Clears
+    // the per-row dot on the chat list for this conversation.
+    unawaited(ChatUnread.markConversationSeen(widget.conversationId));
     if (!mounted) return;
     setState(() {
       _myId = id;
