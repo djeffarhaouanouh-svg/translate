@@ -8,6 +8,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { AccessToken } = require('livekit-server-sdk');
+const { notifyUser } = require('./notify');
 
 dotenv.config();
 
@@ -361,6 +362,22 @@ app.post('/translation/text', async (req, res) => {
   }
 });
 
+// Fan-out push notification dispatcher. Body: { recipientUid, title,
+// body, type, data }. See backend/notify.js for env-var requirements.
+app.post('/api/notify', async (req, res) => {
+  const { recipientUid, title, body, type, data } = req.body || {};
+  if (!recipientUid || !title) {
+    return res.status(400).json({ error: 'missing_recipient_or_title' });
+  }
+  try {
+    const out = await notifyUser(recipientUid, { title, body, type, data });
+    return res.json(out);
+  } catch (e) {
+    console.error('/api/notify error', e);
+    return res.status(500).json({ error: 'notify_failed' });
+  }
+});
+
 if (hasWebUi) {
   app.use(express.static(webPath));
   app.use((req, res, next) => {
@@ -372,7 +389,7 @@ if (hasWebUi) {
       p.startsWith('/livekit') ||
       p === '/health' ||
       p.startsWith('/translation') ||
-      p === '/api'
+      p.startsWith('/api')
     ) {
       return next();
     }

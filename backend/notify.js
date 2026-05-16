@@ -1,0 +1,184 @@
+'use strict';
+
+// Push-notification dispatcher. Fans out a single logical event to
+// every Web Push subscription and FCM token registered for the
+// recipient in `public.notification_targets`.
+//
+// Configuration (all optional — features lazy-load):
+//   * Web Push:  VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
+//                ("mailto:you@example.com")
+//   * FCM:       FIREBASE_SERVICE_ACCOUNT_JSON (the entire JSON pasted in
+//                a single-line env var, OR FIREBASE_SERVICE_ACCOUNT_FILE
+//                pointing to a JSON path on disk)
+//   * Supabase:  SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (required for
+//                fan-out queries — we need to read every target row,
+//                which RLS would otherwise gate on auth.uid())
+//
+// Without those env vars set, the relevant transport is a no-op:
+//  - VAPID missing → web push targets skipped
+//  - Firebase missing → fcm tokens skipped
+//  - Supabase missing → endpoint returns 503
+
+const SUPABASE_URL = process.env.SUPABASE_URL?.trim();
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY?.trim();
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY?.trim();
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT?.trim() || 'mailto:admin@example.com';
+
+let _supabase = null;
+function supabase() {
+  if (_supabase) return _supabase;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
+  const { createClient } = require('@supabase/supabase-js');
+  _supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _supabase;
+}
+
+let _webPushReady = false;
+function webPush() {
+  const wp = require('web-push');
+  if (_webPushReady) return wp;
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return null;
+  wp.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  _webPushReady = true;
+  return wp;
+}
+
+let _firebase = null;
+function firebaseMessaging() {
+  if (_firebase) return _firebase;
+  let serviceAccount;
+  const inline = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  const filePath = process.env.FIREBASE_SERVICE_ACCOUNT_FILE?.trim();
+  if (inline) {
+    try {
+      serviceAccount = JSON.parse(inline);
+    } catch (e) {
+      console.error('[notify] FIREBASE_SERVICE_ACCOUNT_JSON parse failed', e);
+      return null;
+    }
+  } else if (filePath) {
+    try {
+      const fs = require('fs');
+      serviceAccount = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (e) {
+      console.error('[notify] FIREBASE_SERVICE_ACCOUNT_FILE read failed', e);
+      return null;
+    }
+  } else {
+    return null;
+  }
+  const admin = require('firebase-admin');
+  try {
+    if (!admin.apps.length) {
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    }
+    _firebase = admin.messaging();
+    return _firebase;
+  } catch (e) {
+    console.error('[notify] firebase-admin init failed', e);
+    return null;
+  }
+}
+
+/**
+ * Fan-out push to every transport registered for `recipientUid`.
+ * Returns a per-target outcome array so callers can log /
+ * troubleshoot. Never throws — caller errors are surfaced in the array.
+ *
+ * `payload` shape:
+ *   {
+ *     title: 'Lenny',
+ *     body:  '👋 Coucou !',
+ *     type:  'message' | 'friend_request' | 'incoming_call' | 'like',
+ *     data:  { conversationId?, callerId?, …optional extras }
+ *   }
+ */
+async function notifyUser(recipientUid, payload) {
+  const out = { ok: 0, failed: 0, results: [] };
+  const sb = supabase();
+  if (!sb) {
+    out.results.push({ error: 'supabase-not-configured' });
+    return out;
+  }
+  if (!recipientUid || !payload || !payload.title) {
+    out.results.push({ error: 'invalid-args' });
+    return out;
+  }
+
+  const { data: targets, error } = await sb
+    .from('notification_targets')
+    .select('*')
+    .eq('user_id', recipientUid);
+  if (error) {
+    out.results.push({ error: error.message });
+    return out;
+  }
+  if (!targets || targets.length === 0) {
+    return out;
+  }
+
+  const wp = webPush();
+  const fcm = firebaseMessaging();
+
+  await Promise.all(
+    targets.map(async (t) => {
+      try {
+        if (t.platform === 'web') {
+          if (!wp) {
+            out.results.push({ id: t.id, skipped: 'vapid-missing' });
+            return;
+          }
+          const subscription = {
+            endpoint: t.endpoint,
+            keys: { p256dh: t.p256dh, auth: t.auth_key },
+          };
+          await wp.sendNotification(
+            subscription,
+            JSON.stringify(payload),
+            { TTL: 60 },
+          );
+          out.ok += 1;
+          out.results.push({ id: t.id, sent: 'web' });
+        } else if (t.platform === 'ios' || t.platform === 'android') {
+          if (!fcm) {
+            out.results.push({ id: t.id, skipped: 'firebase-missing' });
+            return;
+          }
+          const msg = {
+            token: t.fcm_token,
+            notification: { title: payload.title, body: payload.body || '' },
+            data: Object.fromEntries(
+              Object.entries(payload.data || {}).map(([k, v]) => [k, String(v)]),
+            ),
+            android: { priority: 'high' },
+            apns: {
+              payload: { aps: { sound: 'default' } },
+              headers: { 'apns-priority': '10' },
+            },
+          };
+          await fcm.send(msg);
+          out.ok += 1;
+          out.results.push({ id: t.id, sent: t.platform });
+        } else {
+          out.results.push({ id: t.id, skipped: 'unknown-platform' });
+        }
+      } catch (e) {
+        out.failed += 1;
+        out.results.push({ id: t.id, error: e?.message || String(e) });
+        // Gone / expired subscription → purge so we stop re-trying.
+        const status = e?.statusCode || e?.code;
+        if (status === 404 || status === 410 ||
+            status === 'messaging/registration-token-not-registered') {
+          await sb.from('notification_targets').delete().eq('id', t.id);
+        }
+      }
+    }),
+  );
+
+  return out;
+}
+
+module.exports = { notifyUser };
