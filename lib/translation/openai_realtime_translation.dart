@@ -237,6 +237,18 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final route = _route;
     if (room == null || route == null || !route.isConfigured) return;
 
+    // Hard gate: never spin up the OpenAI session while we're alone in
+    // the room. The ephemeral key minted by `fetchTranslationSession`
+    // costs even before the first audio frame, so waiting until the
+    // remote actually shows up saves us a full session per dial-tone
+    // period (caller waiting for callee to pick up).
+    if (room.remoteParticipants.isEmpty) {
+      if (_boundPublicationSid != null || _pc != null) {
+        unawaited(_onRemoteTrackEnded());
+      }
+      return;
+    }
+
     final pick = _pickTranslationRemoteTrack(room);
     if (pick == null) {
       if (_boundPublicationSid != null || _pc != null) {
@@ -247,6 +259,10 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
     if (_busy) return;
     if (_pc != null && _boundPublicationSid == pick.sid) return;
+    debugPrint(
+      '[xlate] remote present (${room.remoteParticipants.length}) → '
+      'activating OpenAI session for sid=${pick.sid}',
+    );
     unawaited(_bindRemoteAudio(pick.track, pick.sid));
   }
 
@@ -365,6 +381,14 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   ) async {
     final route = _route;
     if (route == null || !route.isConfigured) return;
+    // Belt-and-braces against any code path that might reach this point
+    // while the room is empty (race between detach and a stale refresh
+    // timer firing). Without a remote there's nothing to translate, and
+    // we don't want to burn an OpenAI session for nothing.
+    if (roomRef.remoteParticipants.isEmpty) {
+      debugPrint('[xlate] refusing to open pipeline — room has no remote');
+      return;
+    }
 
     // Pass `targetBcp47` (the remote speaker's language) as input language —
     // the backend forwards it as `audio.input.language` only if the env gate
