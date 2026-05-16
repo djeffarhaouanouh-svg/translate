@@ -41,6 +41,17 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   bool _remoteVoiceHot = false;
   bool _wasPcConnected = false;
 
+  // ─── VAD pause/resume ───────────────────────────────────────────────
+  /// Polls every [_vadPollInterval] to decide whether the call has been
+  /// silent long enough to tear down the OpenAI pipeline (and stop the
+  /// billing meter). Re-armed by [_onActiveSpeakersChanged] when the
+  /// remote starts talking again.
+  Timer? _vadIdleTimer;
+  DateTime _lastSpeakerActiveAt = DateTime.now();
+  bool _pausedForSilence = false;
+  static const Duration _silenceThreshold = Duration(seconds: 20);
+  static const Duration _vadPollInterval = Duration(seconds: 2);
+
   @override
   Listenable? get translationListenable => this;
 
@@ -136,6 +147,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     if (_room == null || _route == null || !_route!.isConfigured) return;
     if (_boundPublicationSid == null && _cachedRemote == null) return;
     if (_busy) return;
+    // VAD has parked the pipeline on purpose — don't fight it.
+    if (_pausedForSilence) return;
 
     // Lost the one-shot renewal timer (e.g. silent early-return in open pipeline).
     if (_refreshTimer == null) {
@@ -245,10 +258,49 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
   void _onActiveSpeakersChanged(ActiveSpeakersChangedEvent e) {
     final hot = e.speakers.any((p) => p is RemoteParticipant);
+    if (hot) {
+      _lastSpeakerActiveAt = DateTime.now();
+      // Resume the OpenAI pipeline immediately if VAD had paused it on
+      // silence — translation needs to be ready before the speaker has
+      // finished their first word.
+      if (_pausedForSilence) {
+        debugPrint('[xlate] VAD resume — speaker active');
+        _pausedForSilence = false;
+        _maybeUpgradeTranslationBinding();
+      }
+    }
     if (hot != _remoteVoiceHot) {
       _remoteVoiceHot = hot;
       notifyListeners();
     }
+  }
+
+  void _startVadIdleWatcher() {
+    _vadIdleTimer?.cancel();
+    _lastSpeakerActiveAt = DateTime.now();
+    _pausedForSilence = false;
+    _vadIdleTimer = Timer.periodic(_vadPollInterval, (_) => _vadTick());
+  }
+
+  void _stopVadIdleWatcher() {
+    _vadIdleTimer?.cancel();
+    _vadIdleTimer = null;
+    _pausedForSilence = false;
+  }
+
+  void _vadTick() {
+    if (_pausedForSilence) return;
+    if (_pc == null) return; // already torn down
+    if (_busy) return;
+    final silentFor = DateTime.now().difference(_lastSpeakerActiveAt);
+    if (silentFor < _silenceThreshold) return;
+    debugPrint(
+      '[xlate] VAD pause — silent for ${silentFor.inSeconds}s, tearing down OpenAI to stop billing',
+    );
+    _pausedForSilence = true;
+    _cancelScheduledRefresh();
+    unawaited(_stopMedia());
+    notifyListeners();
   }
 
   Future<void> _stopMedia() async {
@@ -482,11 +534,24 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     _listener = room.createListener()
       ..on<TrackSubscribedEvent>(_onTrackSubscribed)
       ..on<TrackUnsubscribedEvent>(_onTrackUnsubscribed)
-      ..on<ActiveSpeakersChangedEvent>(_onActiveSpeakersChanged);
+      ..on<ActiveSpeakersChangedEvent>(_onActiveSpeakersChanged)
+      // If the remote disconnects from the room entirely, kill the
+      // OpenAI pipeline immediately — there's nobody left to translate
+      // and we don't want the billing meter to keep ticking until the
+      // user manually leaves.
+      ..on<ParticipantDisconnectedEvent>((_) {
+        if (_room == null) return;
+        final remotes = _room!.remoteParticipants;
+        if (remotes.isEmpty) {
+          debugPrint('[xlate] last remote left — detaching OpenAI');
+          unawaited(detach());
+        }
+      });
 
     notifyListeners();
 
     _startWatchdog();
+    _startVadIdleWatcher();
 
     _maybeUpgradeTranslationBinding();
   }
@@ -544,6 +609,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   Future<void> _fullDetachMediaAndTimer() async {
     _cancelScheduledRefresh();
     _stopWatchdog();
+    _stopVadIdleWatcher();
     _cachedRemote = null;
     _boundPublicationSid = null;
     _remoteVoiceHot = false;
