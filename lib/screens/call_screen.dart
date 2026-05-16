@@ -243,13 +243,17 @@ class _CallScreenState extends State<CallScreen> {
     return id;
   }
 
-  /// Whether we should draw the small PiP at all. We need:
-  /// - a local feed (and the local cam to be on) if we are NOT swapped, OR
-  /// - a remote feed if we ARE swapped (so the user does not get stuck with
-  ///   an empty PiP that they cannot tap to revert).
-  bool _pipFeedAvailable({VideoTrack? local, VideoTrack? remote}) {
-    if (_selfMain) return remote != null;
-    return local != null && _camOn;
+  /// Whether we should draw the small PiP at all. We always show it as
+  /// long as a participant exists on the side that PiP would represent,
+  /// even when their camera is off — the cell falls back to an avatar
+  /// placeholder so the layout doesn't collapse mid-call.
+  bool _pipFeedAvailable({
+    VideoTrack? local,
+    VideoTrack? remote,
+    bool hasRemote = false,
+  }) {
+    if (_selfMain) return hasRemote;
+    return true; // local participant always exists when call is up
   }
 
   VideoTrack? _remoteVideo(Room room) {
@@ -443,11 +447,16 @@ class _CallScreenState extends State<CallScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Main video: remote by default, local when swapped. Tapping
-                // it (when there is also a PiP to swap with) flips the views.
+                // Main view priority:
+                //   1. Remote video, if the remote has a published camera.
+                //   2. "Camera off" placeholder for the remote (their tile
+                //      stays visible, audio keeps flowing).
+                //   3. Self-main local video when explicitly swapped.
+                //   4. Local "camera off" placeholder when self-main + cam off.
+                //   5. Empty-room placeholder if no remote yet.
                 if (_selfMain && local != null && _camOn)
                   GestureDetector(
-                    onTap: remote != null
+                    onTap: remoteCount > 0
                         ? () => setState(() => _selfMain = false)
                         : null,
                     child: VideoTrackRenderer(
@@ -456,11 +465,27 @@ class _CallScreenState extends State<CallScreen> {
                       mirrorMode: VideoViewMirrorMode.mirror,
                     ),
                   )
+                else if (_selfMain && remoteCount > 0)
+                  // Self-main but local cam off → still let the user tap to
+                  // swap back to the remote. Show a "your camera is off"
+                  // placeholder.
+                  GestureDetector(
+                    onTap: () => setState(() => _selfMain = false),
+                    child: const _CameraOffTile(label: 'Your camera is off'),
+                  )
                 else if (remote != null)
                   VideoTrackRenderer(
                     remote,
                     fit: VideoViewFit.cover,
                     mirrorMode: VideoViewMirrorMode.off,
+                  )
+                else if (remoteCount > 0)
+                  // Remote is connected but has their camera off — keep the
+                  // tile visible, the call (audio + translation) is still up.
+                  _CameraOffTile(
+                    label: peerName.isEmpty
+                        ? 'Camera off'
+                        : '$peerName · camera off',
                   )
                 else
                   Container(
@@ -472,24 +497,22 @@ class _CallScreenState extends State<CallScreen> {
                         Icon(Icons.person, size: 80, color: Colors.white.withValues(alpha: 0.28)),
                         const SizedBox(height: 14),
                         Text(
-                          remoteCount == 0 ? 'Waiting for the other person…' : 'No remote video yet…',
+                          'Waiting for the other person…',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.78),
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        if (remoteCount == 0) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Share the same room name on another device.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
-                              fontSize: 13,
-                            ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Share the same room name on another device.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 13,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
@@ -537,8 +560,12 @@ class _CallScreenState extends State<CallScreen> {
                       ),
                     ),
                   ),
-                // PiP: shows whichever feed is NOT the main one. Tap to swap.
-                if (_pipFeedAvailable(local: local, remote: remote))
+                // PiP: shows whichever feed is NOT the main one. Tap to
+                // swap. Always rendered when the corresponding party
+                // exists, even if their camera is off — falls back to a
+                // tiny "camera off" tile so the layout doesn't pop.
+                if (_pipFeedAvailable(
+                    local: local, remote: remote, hasRemote: remoteCount > 0))
                   Positioned(
                     top: MediaQuery.paddingOf(context).top + 52,
                     right: 12,
@@ -560,17 +587,29 @@ class _CallScreenState extends State<CallScreen> {
                               ),
                             ],
                           ),
-                          child: _selfMain && remote != null
-                              ? VideoTrackRenderer(
+                          child: () {
+                            // PiP shows the "not main" side.
+                            if (_selfMain) {
+                              // Main = local, PiP = remote.
+                              if (remote != null) {
+                                return VideoTrackRenderer(
                                   remote,
                                   fit: VideoViewFit.cover,
                                   mirrorMode: VideoViewMirrorMode.off,
-                                )
-                              : VideoTrackRenderer(
-                                  local!,
-                                  fit: VideoViewFit.cover,
-                                  mirrorMode: VideoViewMirrorMode.mirror,
-                                ),
+                                );
+                              }
+                              return const _CameraOffTile(compact: true);
+                            }
+                            // Main = remote, PiP = local.
+                            if (local != null && _camOn) {
+                              return VideoTrackRenderer(
+                                local,
+                                fit: VideoViewFit.cover,
+                                mirrorMode: VideoViewMirrorMode.mirror,
+                              );
+                            }
+                            return const _CameraOffTile(compact: true);
+                          }(),
                         ),
                       ),
                     ),
@@ -672,6 +711,52 @@ class _RoundCallButton extends StatelessWidget {
           style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 11),
         ),
       ],
+    );
+  }
+}
+
+/// Placeholder rendered in place of a video feed when the participant's
+/// camera is off (or the local user has theirs off in a self-main view).
+/// The call audio + translation keep running underneath; this just keeps
+/// the visual cell from collapsing when video drops mid-call.
+class _CameraOffTile extends StatelessWidget {
+  const _CameraOffTile({this.label, this.compact = false});
+
+  final String? label;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconSize = compact ? 28.0 : 64.0;
+    final fontSize = compact ? 10.0 : 14.0;
+    return Container(
+      color: WhatsAppCallTheme.surface,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.videocam_off_outlined,
+            size: iconSize,
+            color: Colors.white.withValues(alpha: 0.55),
+          ),
+          if (label != null && !compact) ...[
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                label!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
