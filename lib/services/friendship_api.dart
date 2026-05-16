@@ -133,26 +133,35 @@ abstract final class FriendshipApi {
   }
 
   /// Counts for the profile screen.
-  /// - `followers`  = accepted friendships where I am the addressee.
-  /// - `following`  = accepted friendships where I am the requester.
+  /// - `followers`  = accepted friendships where the user is the addressee.
+  /// - `following`  = accepted friendships where the user is the requester.
+  ///
+  /// Delegates to the `friendship_counts` SECURITY DEFINER RPC so the
+  /// numbers are correct even when viewing someone else's profile under a
+  /// restrictive RLS policy. The RPC returns aggregates only (no row data
+  /// leaks), so it's safe to expose.
   static Future<FriendshipCounts> countsFor(String userId) async {
     if (!isSupabaseReady || userId.isEmpty) {
       return const FriendshipCounts(followers: 0, following: 0);
     }
     try {
-      final followers = await _c
-          .from('friendships')
-          .select('id')
-          .eq('addressee', userId)
-          .eq('status', 'accepted');
-      final following = await _c
-          .from('friendships')
-          .select('id')
-          .eq('requester', userId)
-          .eq('status', 'accepted');
+      final result = await _c.rpc(
+        'friendship_counts',
+        params: {'p_user_id': userId},
+      );
+      // The function `returns table(...)` so Supabase serialises it as a
+      // list of one row. Accept either shape defensively.
+      final Map<String, dynamic> row;
+      if (result is List && result.isNotEmpty) {
+        row = Map<String, dynamic>.from(result.first as Map);
+      } else if (result is Map) {
+        row = Map<String, dynamic>.from(result);
+      } else {
+        return const FriendshipCounts(followers: 0, following: 0);
+      }
       return FriendshipCounts(
-        followers: (followers as List).length,
-        following: (following as List).length,
+        followers: (row['followers'] as num?)?.toInt() ?? 0,
+        following: (row['following'] as num?)?.toInt() ?? 0,
       );
     } catch (e) {
       debugPrint('FriendshipApi.countsFor failed: $e');
