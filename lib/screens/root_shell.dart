@@ -389,39 +389,54 @@ class _IncomingCallDialogState extends State<_IncomingCallDialog> {
     return Dialog(
       backgroundColor: WhatsAppCallTheme.bar,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ProfileAvatar(
-              displayName: widget.callerName,
-              avatarUrl: widget.callerAvatarUrl,
-              avatarColorHex: widget.callerAvatarColor,
-              size: 88,
-              fontSize: 36,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              widget.callerName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: WhatsAppCallTheme.strongText,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Tappable hero zone — clicking anywhere on the avatar / name /
+          // label accepts the call directly, same effect as the green
+          // button. Keeps the explicit Accept / Decline buttons below
+          // for users who want to refuse.
+          InkWell(
+            onTap: () => Navigator.of(context).pop(true),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ProfileAvatar(
+                    displayName: widget.callerName,
+                    avatarUrl: widget.callerAvatarUrl,
+                    avatarColorHex: widget.callerAvatarColor,
+                    size: 88,
+                    fontSize: 36,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    widget.callerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.strongText,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    AppStrings.t('incoming_call_label'),
+                    style: const TextStyle(
+                      color: WhatsAppCallTheme.subtleText,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              AppStrings.t('incoming_call_label'),
-              style: const TextStyle(
-                color: WhatsAppCallTheme.subtleText,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _RoundActionButton(
@@ -438,8 +453,8 @@ class _IncomingCallDialogState extends State<_IncomingCallDialog> {
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
