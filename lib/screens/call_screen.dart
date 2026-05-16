@@ -804,8 +804,6 @@ class _AudioSettingsSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                _MicLevelStrip(level: controller.micLevel),
-                const SizedBox(height: 18),
                 const _SheetLabel(
                   icon: Icons.record_voice_over_rounded,
                   text: 'Volume de la traduction',
@@ -862,35 +860,6 @@ class _SheetLabel extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _MicLevelStrip extends StatelessWidget {
-  const _MicLevelStrip({required this.level});
-  final double level;
-
-  @override
-  Widget build(BuildContext context) {
-    final clamped = level.clamp(0.0, 1.0).toDouble();
-    return Row(
-      children: [
-        const Icon(Icons.mic_rounded, size: 16, color: WhatsAppCallTheme.subtleText),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: clamped,
-              minHeight: 6,
-              backgroundColor: Colors.white12,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                clamped > 0.85 ? WhatsAppCallTheme.danger : WhatsAppCallTheme.accent,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
