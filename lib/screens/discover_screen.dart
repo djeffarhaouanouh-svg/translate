@@ -16,6 +16,7 @@ import '../services/user_prefs.dart';
 import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
+import 'profile_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -229,6 +230,16 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  Future<void> _openSearchResult(RemoteProfile peer) async {
+    _collapseSearch();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => ProfileScreen(userId: peer.id)),
+    );
+    // Coming back from the profile, the user may have just followed —
+    // refresh so pills reflect reality without waiting for the 10s poll.
+    if (mounted) _refreshLiveSignals();
   }
 
   Future<void> _sendFriendRequest(RemoteProfile peer) async {
@@ -461,6 +472,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   results: _searchResults,
                   statusFor: _statusFor,
                   onAdd: _sendFriendRequest,
+                  onOpen: _openSearchResult,
                 ),
               ),
           ],
@@ -671,6 +683,7 @@ class _SearchResultsPanel extends StatelessWidget {
     required this.results,
     required this.statusFor,
     required this.onAdd,
+    required this.onOpen,
   });
 
   final bool loading;
@@ -678,6 +691,7 @@ class _SearchResultsPanel extends StatelessWidget {
   final List<RemoteProfile> results;
   final FriendshipStatus Function(RemoteProfile) statusFor;
   final ValueChanged<RemoteProfile> onAdd;
+  final ValueChanged<RemoteProfile> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -740,6 +754,7 @@ class _SearchResultsPanel extends StatelessWidget {
           profile: p,
           status: statusFor(p),
           onAdd: () => onAdd(p),
+          onTap: () => onOpen(p),
         );
       },
     );
@@ -751,51 +766,56 @@ class _SearchResultRow extends StatelessWidget {
     required this.profile,
     required this.status,
     required this.onAdd,
+    required this.onTap,
   });
 
   final RemoteProfile profile;
   final FriendshipStatus status;
   final VoidCallback onAdd;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          ProfileAvatar(
-            displayName: profile.displayName,
-            avatarUrl: profile.avatarUrl,
-            avatarColorHex: profile.avatarColor,
-            size: 38,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  profile.displayName.isEmpty ? '—' : profile.displayName,
-                  style: const TextStyle(
-                    color: WhatsAppCallTheme.strongText,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (profile.handle.isNotEmpty)
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            ProfileAvatar(
+              displayName: profile.displayName,
+              avatarUrl: profile.avatarUrl,
+              avatarColorHex: profile.avatarColor,
+              size: 38,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Text(
-                    '@${profile.handle}',
+                    profile.displayName.isEmpty ? '—' : profile.displayName,
                     style: const TextStyle(
-                      color: WhatsAppCallTheme.subtleText,
-                      fontSize: 12,
+                      color: WhatsAppCallTheme.strongText,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-              ],
+                  if (profile.handle.isNotEmpty)
+                    Text(
+                      '@${profile.handle}',
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.subtleText,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          _statusButton(),
-        ],
+            _statusButton(),
+          ],
+        ),
       ),
     );
   }
