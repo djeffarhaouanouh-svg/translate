@@ -59,4 +59,17 @@ abstract final class AuthService {
     }
     return _auth.resetPasswordForEmail(email.trim().toLowerCase());
   }
+
+  /// Re-trigger the signup confirmation email for users who never clicked
+  /// the original link. Idempotent server-side: Supabase rate-limits how
+  /// often this can fire per address.
+  static Future<void> resendSignupConfirmation(String email) {
+    if (!isSupabaseReady) {
+      throw StateError('Supabase non configuré');
+    }
+    return _auth.resend(
+      type: OtpType.signup,
+      email: email.trim().toLowerCase(),
+    );
+  }
 }

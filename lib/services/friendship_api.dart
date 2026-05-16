@@ -106,30 +106,36 @@ abstract final class FriendshipApi {
   /// side of the relation [meId] is on:
   /// - followers  → people who sent ME a request that I accepted.
   /// - following  → people I sent a request to and they accepted.
+  ///
+  /// Uses the `friendship_accepted_peers` SECURITY DEFINER RPC to get the
+  /// peer ids (so the result is correct even under restrictive RLS on
+  /// `friendships`), then hydrates them via `profiles`.
   static Future<List<RemoteProfile>> fetchAcceptedPeers({
     required String meId,
     required FriendDirection direction,
   }) async {
     if (!isSupabaseReady || meId.isEmpty) return const [];
-    final filterColumn =
-        direction == FriendDirection.followers ? 'addressee' : 'requester';
-    final peerColumn =
-        direction == FriendDirection.followers ? 'requester' : 'addressee';
-    final rows = await _c
-        .from('friendships')
-        .select()
-        .eq(filterColumn, meId)
-        .eq('status', 'accepted');
-    final friendships = (rows as List)
-        .map((r) => Friendship.fromMap(Map<String, dynamic>.from(r as Map)))
-        .toList(growable: false);
-    if (friendships.isEmpty) return const [];
-    final peerIds = friendships
-        .map((f) => peerColumn == 'requester' ? f.requester : f.addressee)
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
-    return ProfileApi.fetchByIds(peerIds);
+    try {
+      final result = await _c.rpc(
+        'friendship_accepted_peers',
+        params: {
+          'p_user_id': meId,
+          'p_direction':
+              direction == FriendDirection.followers ? 'followers' : 'following',
+        },
+      );
+      if (result is! List) return const [];
+      final peerIds = result
+          .map((r) => Map<String, dynamic>.from(r as Map)['peer_id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+      if (peerIds.isEmpty) return const [];
+      return ProfileApi.fetchByIds(peerIds);
+    } catch (e) {
+      debugPrint('FriendshipApi.fetchAcceptedPeers failed: $e');
+      return const [];
+    }
   }
 
   /// Counts for the profile screen.

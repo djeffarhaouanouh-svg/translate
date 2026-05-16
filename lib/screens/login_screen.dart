@@ -26,6 +26,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showPassword = false;
   String? _error;
   String? _info;
+  /// True once we know the entered email exists but isn't confirmed yet —
+  /// drives the "Resend confirmation email" affordance.
+  bool _showResendConfirmation = false;
 
   static final _emailRegex =
       RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
@@ -43,6 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _error = null;
       _info = null;
+      _showResendConfirmation = false;
     });
     if (!_emailRegex.hasMatch(email)) {
       setState(() => _error = AppStrings.t('login_err_email'));
@@ -62,6 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (res.session == null) {
           setState(() {
             _info = AppStrings.t('login_check_inbox');
+            _showResendConfirmation = true;
             _busy = false;
           });
           return;
@@ -70,6 +75,49 @@ class _LoginScreenState extends State<LoginScreen> {
         await AuthService.signIn(email: email, password: password);
       }
       // Parent listens to auth state changes — it'll route us away.
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      // Surface the "Resend confirmation" affordance when the failure is
+      // specifically "email not confirmed" so the user has a way forward
+      // without retyping everything.
+      final code = e.code ?? '';
+      final msg = e.message.toLowerCase();
+      final notConfirmed =
+          code == 'email_not_confirmed' || msg.contains('email not confirmed');
+      setState(() {
+        _error = notConfirmed
+            ? AppStrings.t('login_err_not_confirmed')
+            : e.message;
+        _showResendConfirmation = notConfirmed;
+        _busy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _busy = false;
+      });
+    }
+  }
+
+  Future<void> _resendConfirmation() async {
+    final email = _emailCtrl.text.trim();
+    if (!_emailRegex.hasMatch(email)) {
+      setState(() => _error = AppStrings.t('login_err_email'));
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      await AuthService.resendSignupConfirmation(email);
+      if (!mounted) return;
+      setState(() {
+        _info = AppStrings.t('login_resend_sent');
+        _busy = false;
+      });
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -228,6 +276,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: WhatsAppCallTheme.accent,
                         fontSize: 13,
                         height: 1.35,
+                      ),
+                    ),
+                  ],
+                  if (_showResendConfirmation) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _busy ? null : _resendConfirmation,
+                        icon: const Icon(Icons.mark_email_unread_outlined,
+                            size: 18),
+                        label: Text(AppStrings.t('login_resend_confirm')),
                       ),
                     ),
                   ],

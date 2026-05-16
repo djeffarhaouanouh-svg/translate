@@ -222,6 +222,11 @@ abstract final class AppStrings {
     'login_err_password': 'Le mot de passe doit faire 6 caractères ou plus.',
     'login_check_inbox':
         'Vérifie ta boîte mail : on t\'a envoyé un lien de confirmation.',
+    'login_resend_confirm': 'Renvoyer le mail de confirmation',
+    'login_resend_sent':
+        'Mail de confirmation renvoyé. Vérifie ta boîte (et les spams).',
+    'login_err_not_confirmed':
+        'E-mail pas encore confirmé. Clique sur le lien reçu par mail, ou renvoie-le.',
     'login_reset_sent':
         'Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé.',
 
@@ -425,6 +430,11 @@ abstract final class AppStrings {
     'login_err_email': 'Enter a valid email address.',
     'login_err_password': 'Password must be at least 6 characters.',
     'login_check_inbox': 'Check your inbox — we sent you a confirmation link.',
+    'login_resend_confirm': 'Resend confirmation email',
+    'login_resend_sent':
+        'Confirmation email resent. Check your inbox (and spam folder).',
+    'login_err_not_confirmed':
+        'Email not confirmed yet. Click the link we sent you, or resend it.',
     'login_reset_sent':
         'If an account exists for that email, a reset link has been sent.',
 
