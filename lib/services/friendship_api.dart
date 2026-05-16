@@ -187,12 +187,15 @@ abstract final class FriendshipApi {
         .toList(growable: false);
   }
 
-  /// Send a follow request from [meId] to [peerId]. Idempotent on the same
-  /// direction. If [peerId] already has a row pointing at [meId] (i.e. they
-  /// came first), this is treated as a "follow back" and the new row lands
-  /// with status='accepted' directly — no second approval needed. Any
-  /// still-pending reverse row is flipped to accepted at the same time, so
-  /// both sides converge to the mutual state in one tap.
+  /// Send a follow from [meId] to [peerId]. Auto-accepted on both sides —
+  /// no approval step, the relation lands as `accepted` immediately so the
+  /// peer appears in both users' Chat list right away. If a reverse row
+  /// already exists in `pending`, it's flipped to `accepted` at the same
+  /// time so the two sides converge.
+  ///
+  /// Idempotent: if a same-direction row already exists, it's returned
+  /// as-is (and upgraded to `accepted` if it was still pending from an
+  /// earlier version of the app).
   static Future<Friendship?> sendRequest({
     required String meId,
     required String peerId,
@@ -200,7 +203,10 @@ abstract final class FriendshipApi {
     if (!isSupabaseReady) return null;
     if (meId.isEmpty || peerId.isEmpty || meId == peerId) return null;
 
-    // 1. Same-direction row → idempotent.
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+
+    // 1. Same-direction row → idempotent. Upgrade to accepted if a previous
+    //    version of the app left it pending.
     final sameDir = await _c
         .from('friendships')
         .select()
@@ -209,11 +215,23 @@ abstract final class FriendshipApi {
         .limit(1)
         .maybeSingle();
     if (sameDir != null) {
-      return Friendship.fromMap(Map<String, dynamic>.from(sameDir));
+      final existing = Friendship.fromMap(Map<String, dynamic>.from(sameDir));
+      if (existing.status == 'pending') {
+        try {
+          final upgraded = await _c.from('friendships').update({
+            'status': 'accepted',
+            'responded_at': nowIso,
+          }).eq('id', existing.id).select().single();
+          return Friendship.fromMap(Map<String, dynamic>.from(upgraded));
+        } catch (e) {
+          debugPrint('FriendshipApi.sendRequest upgrade-existing failed: $e');
+        }
+      }
+      return existing;
     }
 
-    // 2. Reverse row → peer already follows me; auto-accept on this side and
-    //    upgrade their row to accepted if still pending.
+    // 2. Reverse row → peer already follows me; flip their row to accepted
+    //    if still pending so both sides converge.
     final reverse = await _c
         .from('friendships')
         .select()
@@ -221,8 +239,6 @@ abstract final class FriendshipApi {
         .eq('addressee', meId)
         .limit(1)
         .maybeSingle();
-    final autoAccept = reverse != null;
-    final nowIso = DateTime.now().toUtc().toIso8601String();
     if (reverse != null) {
       final reverseFs =
           Friendship.fromMap(Map<String, dynamic>.from(reverse));
@@ -238,17 +254,14 @@ abstract final class FriendshipApi {
       }
     }
 
-    final payload = <String, dynamic>{
-      'requester': meId,
-      'addressee': peerId,
-      'status': autoAccept ? 'accepted' : 'pending',
-    };
-    if (autoAccept) {
-      payload['responded_at'] = nowIso;
-    }
     final inserted = await _c
         .from('friendships')
-        .insert(payload)
+        .insert({
+          'requester': meId,
+          'addressee': peerId,
+          'status': 'accepted',
+          'responded_at': nowIso,
+        })
         .select()
         .single();
     return Friendship.fromMap(Map<String, dynamic>.from(inserted));
