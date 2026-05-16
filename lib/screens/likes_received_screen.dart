@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_strings.dart';
 import '../services/device_id.dart';
 import '../services/like_api.dart';
 import '../services/profile_api.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 import 'profile_screen.dart';
@@ -21,15 +24,26 @@ class LikesReceivedScreen extends StatefulWidget {
 class _LikesReceivedScreenState extends State<LikesReceivedScreen> {
   bool _loading = true;
   List<RemoteProfile> _likers = const [];
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _pollTimer = WebPoll.every(
+      const Duration(seconds: 15),
+      () => _load(silent: true),
+    );
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() => _loading = true);
     final uid = await DeviceId.getOrCreate();
     final list = await LikeApi.fetchLikersOf(uid);
     if (!mounted) return;

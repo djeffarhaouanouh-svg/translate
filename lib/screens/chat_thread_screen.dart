@@ -11,6 +11,7 @@ import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/translation_api.dart';
 import '../services/user_prefs.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
@@ -47,6 +48,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   final _scrollCtrl = ScrollController();
 
   StreamSubscription<List<ChatMessage>>? _sub;
+  Timer? _pollTimer;
   List<ChatMessage> _messages = const [];
   String _myId = '';
   String _myName = '';
@@ -231,6 +233,31 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         setState(() => _error = 'Connexion temps réel perdue: $e');
       },
     );
+
+    // Web build: even with the realtime subscription above, websockets
+    // sometimes drop. Poll the last 200 messages every 5s as a safety
+    // net so new arrivals always surface quickly.
+    _pollTimer = WebPoll.every(const Duration(seconds: 5), () async {
+      try {
+        final rows = await ChatApi.fetchMessages(widget.conversationId);
+        if (!mounted) return;
+        // Only repaint when there's actually a new tail message — keeps
+        // the chat from rebuilding constantly while the user is typing.
+        final last = _messages.isEmpty ? null : _messages.last.id;
+        final freshLast = rows.isEmpty ? null : rows.last.id;
+        if (last == freshLast && rows.length == _messages.length) return;
+        setState(() => _messages = rows);
+        if (_autoTranslate) {
+          for (final m in rows) {
+            _maybeFetchTranslation(m);
+          }
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      } catch (_) {
+        // Swallow — the realtime sub is the primary path; polling errors
+        // shouldn't surface to the user.
+      }
+    });
   }
 
   void _scrollToBottom() {
@@ -245,6 +272,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   @override
   void dispose() {
     _sub?.cancel();
+    _pollTimer?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();

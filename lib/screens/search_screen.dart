@@ -8,6 +8,7 @@ import '../services/friendship_api.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 
@@ -32,6 +33,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
   bool _searching = false;
   String? _error;
   RealtimeChannel? _friendshipsChannel;
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -52,6 +54,7 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _queryCtrl.dispose();
+    _pollTimer?.cancel();
     final ch = _friendshipsChannel;
     if (ch != null) {
       unawaited(Supabase.instance.client.removeChannel(ch));
@@ -76,6 +79,12 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
         },
       );
     }
+    // Web realtime occasionally drops — polling backup so a freshly
+    // received friend request still surfaces within ~8s.
+    _pollTimer = WebPoll.every(
+      const Duration(seconds: 8),
+      () => _refreshFriendships(),
+    );
   }
 
   Future<void> _refreshFriendships() async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_strings.dart';
@@ -5,6 +7,7 @@ import '../services/device_id.dart';
 import '../services/friendship_api.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 import 'profile_screen.dart';
@@ -29,19 +32,32 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   Set<String> _myFollowingPendingIds = const {};
   bool _loading = true;
   String? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _pollTimer = WebPoll.every(
+      const Duration(seconds: 12),
+      () => _load(silent: true),
+    );
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final id = await DeviceId.getOrCreate();
       final peers = await FriendshipApi.fetchAcceptedPeers(

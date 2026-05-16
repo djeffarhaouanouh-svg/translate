@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_strings.dart';
@@ -8,6 +10,7 @@ import '../services/friendship_api.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
@@ -35,12 +38,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Map<String, ChatMessage> _latestByConv = const {};
   bool _loading = true;
   String? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _reload();
+    // Web build doesn't always get realtime push reliably — poll the list
+    // silently so new messages / new friends appear without pull-to-refresh.
+    _pollTimer = WebPoll.every(
+      const Duration(seconds: 7),
+      () => _reload(silent: true),
+    );
     // NOTE: we deliberately do NOT call ChatUnread.markAllSeen() here.
     // ChatScreen lives inside IndexedStack, so initState fires at app
     // launch even when the user is on another tab — calling markAllSeen
@@ -52,6 +62,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -62,12 +73,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final id = await DeviceId.getOrCreate();
       if (!isSupabaseReady) {

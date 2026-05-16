@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -10,6 +12,7 @@ import '../services/like_api.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 import 'chat_thread_screen.dart';
@@ -49,6 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   // Viewer-mode only: have I liked the displayed user? Drives the heart
   // overlay on the peer's Discover photo.
   bool _iLikePeer = false;
+  Timer? _pollTimer;
 
   bool get _isViewingOther => widget.userId != null;
   String get _targetId => widget.userId ?? _deviceId;
@@ -58,11 +62,19 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _reload();
+    // Web build: poll for fresh counts / likes / bio every 12s so changes
+    // made elsewhere (a new follower, an incoming like) appear without a
+    // manual refresh.
+    _pollTimer = WebPoll.every(
+      const Duration(seconds: 12),
+      () => _reload(silent: true),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -73,9 +85,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     }
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    if (!silent) {
+      setState(() => _loading = true);
+    }
     final deviceId = await DeviceId.getOrCreate();
     final targetId = widget.userId ?? deviceId;
     // Local prefs only matter for my own profile (offline fallback). When
