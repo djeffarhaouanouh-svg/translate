@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'push_dispatcher.dart';
 
 class ChatMessage {
   ChatMessage({
@@ -73,6 +77,17 @@ abstract final class ChatApi {
       'body': body,
       'language': language,
     });
+    // Fire-and-forget push to the recipient. Best-effort; never block
+    // or fail the send because of a notification hiccup.
+    unawaited(
+      PushDispatcher.notify(
+        recipientUid: recipientId,
+        title: senderName.isEmpty ? 'Nouveau message' : senderName,
+        body: body,
+        type: 'message',
+        data: {'conversationId': conversationId, 'senderId': senderId},
+      ),
+    );
   }
 
   /// Latest message per conversation that involves [meId]. Used by the

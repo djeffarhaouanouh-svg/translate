@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'profile_api.dart';
+import 'push_dispatcher.dart';
 import 'supabase_service.dart';
 
 class IncomingFriendRequest {
@@ -264,7 +267,27 @@ abstract final class FriendshipApi {
         })
         .select()
         .single();
+    // Fire-and-forget push: peer gets a "X veut être ami" notif. Best
+    // effort — never block the friendship insert on the dispatch call.
+    unawaited(_notifyNewFollower(meId, peerId));
     return Friendship.fromMap(Map<String, dynamic>.from(inserted));
+  }
+
+  static Future<void> _notifyNewFollower(String meId, String peerId) async {
+    if (!isSupabaseReady) return;
+    try {
+      final myProfile = await ProfileApi.fetchById(meId);
+      final myName = myProfile?.displayName.trim() ?? '';
+      await PushDispatcher.notify(
+        recipientUid: peerId,
+        title: myName.isEmpty ? 'Nouvel abonné' : myName,
+        body: 'a commencé à te suivre',
+        type: 'friend_request',
+        data: {'requesterId': meId},
+      );
+    } catch (e) {
+      debugPrint('friendship notify failed: $e');
+    }
   }
 
   static Future<void> accept(String friendshipId) async {

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'profile_api.dart';
+import 'push_dispatcher.dart';
 import 'supabase_service.dart';
 
 /// Read/write helpers for the `likes` table:
@@ -45,9 +48,26 @@ abstract final class LikeApi {
         },
         onConflict: 'liker,liked',
       );
+      unawaited(_notifyLike(likerId, likedId));
     } catch (e) {
       debugPrint('LikeApi.like failed: $e');
       rethrow;
+    }
+  }
+
+  static Future<void> _notifyLike(String likerId, String likedId) async {
+    try {
+      final likerProfile = await ProfileApi.fetchById(likerId);
+      final likerName = likerProfile?.displayName.trim() ?? '';
+      await PushDispatcher.notify(
+        recipientUid: likedId,
+        title: likerName.isEmpty ? 'Nouveau like ❤' : likerName,
+        body: 'a aimé ton profil ❤',
+        type: 'like',
+        data: {'likerId': likerId},
+      );
+    } catch (e) {
+      debugPrint('like notify failed: $e');
     }
   }
 

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'profile_api.dart';
+import 'push_dispatcher.dart';
 import 'supabase_service.dart';
 
 /// One pending incoming call as seen by the callee. The room name is what
@@ -117,10 +119,41 @@ abstract final class IncomingCallApi {
           .single();
       final id = Map<String, dynamic>.from(inserted)['id']?.toString();
       debugPrint('[ring] inserted incoming_call id=$id callee=$calleeId');
+      unawaited(_notifyRing(
+        callerId: callerId,
+        calleeId: calleeId,
+        callId: id ?? '',
+        roomName: roomName,
+      ));
       return _ringResult(id: id);
     } catch (e) {
       debugPrint('[ring] FAILED (auth.uid=$authUid caller=$callerId): $e');
       return _ringResult(error: e.toString());
+    }
+  }
+
+  static Future<void> _notifyRing({
+    required String callerId,
+    required String calleeId,
+    required String callId,
+    required String roomName,
+  }) async {
+    try {
+      final caller = await ProfileApi.fetchById(callerId);
+      final callerName = caller?.displayName.trim() ?? '';
+      await PushDispatcher.notify(
+        recipientUid: calleeId,
+        title: callerName.isEmpty ? 'Appel entrant' : callerName,
+        body: '📞 Appel entrant',
+        type: 'incoming_call',
+        data: {
+          'callId': callId,
+          'callerId': callerId,
+          'roomName': roomName,
+        },
+      );
+    } catch (e) {
+      debugPrint('ring notify failed: $e');
     }
   }
 
