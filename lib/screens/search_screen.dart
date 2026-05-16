@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
+import '../services/greetings.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
@@ -155,6 +156,9 @@ class _SearchScreenState extends State<SearchScreen> with WidgetsBindingObserver
         );
         return;
       }
+      // Seed a 👋 so the conversation appears in both chat lists right
+      // away — best-effort, ignored on failure.
+      unawaited(Greetings.sendIntroMessage(myId: _myId, peerId: peer.id));
       await _refreshFriendships();
     } catch (e) {
       if (!mounted) return;

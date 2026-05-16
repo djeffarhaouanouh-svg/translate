@@ -12,6 +12,7 @@ import '../services/incoming_call_api.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/token_api.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
@@ -46,6 +47,12 @@ class _RootShellState extends State<RootShell> {
 
   RealtimeChannel? _callsChannel;
   bool _ringingDialogOpen = false;
+  Timer? _callPollTimer;
+  String _myCalleeId = '';
+  /// Call ids that have already triggered the modal — keeps the realtime
+  /// channel and the polling backup from racing into two dialogs for the
+  /// same ring. Cleared lazily; bounded by call rate so it won't blow up.
+  final Set<String> _handledCallIds = {};
 
   @override
   void initState() {
@@ -57,14 +64,32 @@ class _RootShellState extends State<RootShell> {
     if (!isSupabaseReady) return;
     final myId = await DeviceId.getOrCreate();
     if (!mounted || myId.isEmpty) return;
+    _myCalleeId = myId;
     _callsChannel = IncomingCallApi.subscribe(
       calleeId: myId,
       onCall: _handleIncomingCall,
     );
+    // Web realtime occasionally misses INSERT events (websocket drop,
+    // tab throttling). Poll every 3s as a safety net so a missed
+    // notification is at most ~3s late.
+    _callPollTimer = WebPoll.every(const Duration(seconds: 3), () async {
+      if (!mounted || _ringingDialogOpen) return;
+      final pending = await IncomingCallApi.fetchPending(_myCalleeId);
+      if (!mounted) return;
+      for (final call in pending) {
+        if (_handledCallIds.contains(call.id)) continue;
+        _handleIncomingCall(call);
+        // The dialog can only handle one ring at a time. Bail out and
+        // let the next poll pick up any remaining ones once it closes.
+        break;
+      }
+    });
   }
 
   Future<void> _handleIncomingCall(IncomingCall call) async {
     if (!mounted || _ringingDialogOpen) return;
+    if (_handledCallIds.contains(call.id)) return;
+    _handledCallIds.add(call.id);
     final caller = isSupabaseReady
         ? await ProfileApi.fetchById(call.callerId)
         : null;
@@ -130,6 +155,7 @@ class _RootShellState extends State<RootShell> {
 
   @override
   void dispose() {
+    _callPollTimer?.cancel();
     final ch = _callsChannel;
     if (ch != null) {
       unawaited(Supabase.instance.client.removeChannel(ch));

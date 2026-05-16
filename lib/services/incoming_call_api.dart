@@ -90,6 +90,26 @@ abstract final class IncomingCallApi {
     }
   }
 
+  /// One-shot lookup of every still-ringing row addressed to [calleeId].
+  /// Used as a polling backup on the web build where the realtime
+  /// websocket subscription isn't always reliable (browser throttling,
+  /// network hiccups).
+  static Future<List<IncomingCall>> fetchPending(String calleeId) async {
+    if (!isSupabaseReady || calleeId.isEmpty) return const [];
+    try {
+      final rows = await _c
+          .from('incoming_calls')
+          .select()
+          .eq('callee', calleeId);
+      return (rows as List)
+          .map((r) => IncomingCall.fromMap(Map<String, dynamic>.from(r as Map)))
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('IncomingCallApi.fetchPending failed: $e');
+      return const [];
+    }
+  }
+
   /// Removes a ringing row. Both caller (cancel before pickup) and callee
   /// (decline / accept) are allowed by the RLS policy.
   static Future<void> cancel({required String callId}) async {

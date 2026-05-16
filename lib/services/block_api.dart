@@ -88,6 +88,29 @@ abstract final class BlockApi {
     }
   }
 
+  /// Set of user ids who have *blocked me*, derived from the
+  /// `my_blockers` SECURITY DEFINER RPC because the table-level RLS
+  /// only authorises reading rows where the caller is the blocker. The
+  /// chat list uses this to hide conversations where the peer has
+  /// blocked me — sending into a black hole is worse UX than just
+  /// not showing the thread.
+  static Future<Set<String>> fetchMyBlockerIds() async {
+    if (!isSupabaseReady) return const <String>{};
+    try {
+      final result = await _c.rpc('my_blockers');
+      if (result is! List) return const <String>{};
+      return result
+          .map((r) => Map<String, dynamic>.from(r as Map)['blocker_id']
+                  ?.toString() ??
+              '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } catch (e) {
+      debugPrint('BlockApi.fetchMyBlockerIds failed: $e');
+      return const <String>{};
+    }
+  }
+
   /// Hydrated list of profiles I've blocked, newest first. Used by the
   /// Settings → "Liste des bloqués" screen so each row can show the
   /// avatar + name and offer an Unblock action.

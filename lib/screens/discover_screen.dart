@@ -7,6 +7,7 @@ import '../services/app_strings.dart';
 import '../services/chat_api.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
+import '../services/greetings.dart';
 import '../services/languages.dart';
 import '../services/like_api.dart';
 import '../services/profile_api.dart';
@@ -207,6 +208,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (!mounted) return;
     if (f != null) {
       setState(() => _myFriendships = [..._myFriendships, f]);
+      // Seed a 👋 so the conversation appears on both sides immediately
+      // — best-effort, ignored on failure.
+      unawaited(Greetings.sendIntroMessage(myId: _myId, peerId: peer.id));
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

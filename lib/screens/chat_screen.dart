@@ -115,6 +115,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // activity (WhatsApp style).
       final latest = await ChatApi.fetchLatestPerConversation(id);
       final seen = await ChatUnread.readPerConversationSeen();
+      // Drop any conversation where either side has blocked the other —
+      // I blocked them (BlockApi.fetchMyBlockedProfiles) or they blocked
+      // me (my_blockers RPC). Both directions should make the row
+      // disappear from this chat list so the user can't keep messaging
+      // into a void.
+      final iBlocked = await BlockApi.fetchMyBlockedProfiles(id);
+      final blockedByMe = iBlocked.map((p) => p.id).toSet();
+      final blockedMe = await BlockApi.fetchMyBlockerIds();
+      final hiddenPeers = {...blockedByMe, ...blockedMe};
+      byId.removeWhere((k, _) => hiddenPeers.contains(k));
 
       String convIdFor(String otherId) {
         final ids = [id, otherId]..sort();
