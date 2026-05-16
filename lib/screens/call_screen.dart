@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/app_strings.dart';
 import '../services/audio_controller.dart';
 import '../services/auth_service.dart';
+import '../services/call_alert.dart';
 import '../services/profile_api.dart';
 import '../services/usage_tracker.dart';
 import '../theme/whatsapp_call_theme.dart';
@@ -210,6 +211,9 @@ class _CallScreenState extends State<CallScreen> {
           if (mounted) setState(() {});
         })
         ..on<ParticipantConnectedEvent>((_) {
+          // First remote joining = call answered → silence the caller's
+          // dial tone (no-op on native via the stub).
+          CallAlert.stop();
           unawaited(_refreshTranslationBinding(room));
           if (mounted) setState(() {});
         })

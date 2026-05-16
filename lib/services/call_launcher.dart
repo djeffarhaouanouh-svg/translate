@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../screens/call_screen.dart';
 import '../translation/realtime_translation_port.dart';
+import 'call_alert.dart';
 import 'device_id.dart';
 import 'incoming_call_api.dart';
 import 'profile_api.dart';
@@ -83,6 +84,9 @@ abstract final class CallLauncher {
         );
       }
       final ringId = ring.id;
+      // Web-only outgoing dial tone — stops when CallScreen sees the
+      // first remote join (callee picked up) or when CallScreen pops.
+      CallAlert.startDialing();
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => CallScreen(
@@ -95,6 +99,9 @@ abstract final class CallLauncher {
           ),
         ),
       );
+      // Defensive: in case CallScreen never saw a remote (declined /
+      // unanswered), make sure the dial tone is silenced.
+      CallAlert.stop();
       // Hangup / leave call → record the call's duration in-place so the
       // row survives as history (used to be a DELETE).
       if (ringId != null) {

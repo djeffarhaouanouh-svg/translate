@@ -54,6 +54,41 @@ abstract final class CallAlert {
     });
   }
 
+  /// Caller-side dial tone: a single longer beep every 3s, softer than
+  /// the brrring-brrring used for incoming calls. No vibration (the
+  /// caller doesn't need to feel their own outgoing ring), no title
+  /// flashing (the title is set once and held).
+  static void startDialing({String? calleeName}) {
+    stop();
+
+    _dialOnce();
+    _ringTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _dialOnce(),
+    );
+
+    _origTitle = web.document.title;
+    final label = (calleeName != null && calleeName.isNotEmpty)
+        ? '📞 Appel vers $calleeName…'
+        : '📞 Appel sortant…';
+    web.document.title = label;
+  }
+
+  static void _dialOnce() {
+    try {
+      final ctx = _audioCtx ??= web.AudioContext();
+      if (ctx.state == 'suspended') {
+        ctx.resume().toDart.catchError((Object _) => null);
+      }
+      final now = ctx.currentTime;
+      // One longer, quieter beep at a lower pitch — feels like a phone
+      // ring-back tone rather than a doorbell.
+      _scheduleBeep(ctx, now, durationSec: 1.2, freq: 440, peak: 0.10);
+    } catch (e) {
+      debugPrint('CallAlert dial failed: $e');
+    }
+  }
+
   /// Pattern: 300ms on / 200ms off / 300ms on / 200ms off / 600ms on.
   /// Approximates a classic ring "brrring-brrring".
   static void _vibrateOnce() {
