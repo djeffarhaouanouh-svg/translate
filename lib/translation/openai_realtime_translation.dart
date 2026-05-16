@@ -41,6 +41,10 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   bool _remoteVoiceHot = false;
   bool _wasPcConnected = false;
 
+  /// Playback volume for the translated-audio renderer in [0, 1]. Stored
+  /// here so the value survives renderer rebuilds (refresh / reconnect).
+  double _translatedVolume = 1.0;
+
   // ─── VAD pause/resume ───────────────────────────────────────────────
   /// Polls every [_vadPollInterval] to decide whether the call has been
   /// silent long enough to tear down the OpenAI pipeline (and stop the
@@ -76,6 +80,19 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
   @override
   bool get translationRemoteVoiceHot => _remoteVoiceHot;
+
+  @override
+  Future<void> setTranslatedAudioVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0);
+    _translatedVolume = clamped;
+    final r = _renderer;
+    if (r == null) return;
+    try {
+      await r.setVolume(clamped);
+    } catch (e) {
+      debugPrint('OpenAi translation: setVolume on renderer failed: $e');
+    }
+  }
 
   @override
   Widget? buildTranslationAudioOverlay() {
@@ -409,6 +426,9 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       pc.onTrack = (RTCTrackEvent event) {
         if (event.streams.isEmpty) return;
         playbackRenderer.srcObject = event.streams[0];
+        // Re-apply the user's preferred volume on every new media stream
+        // (refresh / reconnect rebuilds the renderer source).
+        unawaited(playbackRenderer.setVolume(_translatedVolume));
         notifyListeners();
       };
 

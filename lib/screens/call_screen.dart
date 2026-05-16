@@ -7,6 +7,7 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../services/app_strings.dart';
+import '../services/audio_controller.dart';
 import '../services/auth_service.dart';
 import '../services/profile_api.dart';
 import '../services/usage_tracker.dart';
@@ -57,6 +58,17 @@ class _CallScreenState extends State<CallScreen> {
   /// Set when an event arrives while a refresh is in flight; we re-run once
   /// the in-flight call completes so the latest state is reflected.
   bool _refreshPending = false;
+
+  late final AudioController _audio = AudioController(translation: widget.translation);
+  bool _lastRemoteHot = false;
+
+  void _onTranslationStateChanged() {
+    final hot = widget.translation.translationRemoteVoiceHot;
+    if (hot != _lastRemoteHot) {
+      _lastRemoteHot = hot;
+      _audio.onRemoteVoiceHot(hot);
+    }
+  }
 
   void _onRoomChanged() {
     if (mounted) setState(() {});
@@ -209,6 +221,8 @@ class _CallScreenState extends State<CallScreen> {
           unawaited(_refreshTranslationBinding(room));
           if (mounted) setState(() {});
         });
+      await _audio.bind(room);
+      widget.translation.translationListenable?.addListener(_onTranslationStateChanged);
       if (mounted) {
         setState(() {
           _room = room;
@@ -292,6 +306,18 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) setState(() => _camOn = next);
   }
 
+  void _openAudioSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WhatsAppCallTheme.bar,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => _AudioSettingsSheet(controller: _audio),
+    );
+  }
+
   Future<void> _hangUp() async {
     await widget.translation.detach();
     await _roomEvents?.dispose();
@@ -334,6 +360,8 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
+    widget.translation.translationListenable?.removeListener(_onTranslationStateChanged);
+    _audio.dispose();
     UsageTracker.creditsExhausted.removeListener(_onCreditsExhausted);
     // Flush whatever seconds were used since the last tick before tearing
     // everything down. Fire-and-forget — disposing a State must be sync.
@@ -428,6 +456,11 @@ class _CallScreenState extends State<CallScreen> {
     final remoteCount = room.remoteParticipants.length;
     final peer = _primaryRemote(room);
     final peerName = _remoteDisplayName(peer);
+    final peerFirstName =
+        peerName.isEmpty ? null : peerName.split(' ').first;
+    final localFirstName = widget.displayName.trim().isEmpty
+        ? null
+        : widget.displayName.trim().split(' ').first;
 
     return PopScope(
       canPop: false,
@@ -467,11 +500,11 @@ class _CallScreenState extends State<CallScreen> {
                   )
                 else if (_selfMain && remoteCount > 0)
                   // Self-main but local cam off → still let the user tap to
-                  // swap back to the remote. Show a "your camera is off"
-                  // placeholder.
+                  // swap back to the remote. Show the local user's first
+                  // name as placeholder.
                   GestureDetector(
                     onTap: () => setState(() => _selfMain = false),
-                    child: const _CameraOffTile(label: 'Your camera is off'),
+                    child: _CameraOffTile(label: localFirstName),
                   )
                 else if (remote != null)
                   VideoTrackRenderer(
@@ -482,11 +515,7 @@ class _CallScreenState extends State<CallScreen> {
                 else if (remoteCount > 0)
                   // Remote is connected but has their camera off — keep the
                   // tile visible, the call (audio + translation) is still up.
-                  _CameraOffTile(
-                    label: peerName.isEmpty
-                        ? null
-                        : peerName.split(' ').first,
-                  )
+                  _CameraOffTile(label: peerFirstName)
                 else
                   Container(
                     color: WhatsAppCallTheme.surface,
@@ -598,7 +627,10 @@ class _CallScreenState extends State<CallScreen> {
                                   mirrorMode: VideoViewMirrorMode.off,
                                 );
                               }
-                              return const _CameraOffTile(compact: true);
+                              return _CameraOffTile(
+                                compact: true,
+                                label: peerFirstName,
+                              );
                             }
                             // Main = remote, PiP = local.
                             if (local != null && _camOn) {
@@ -608,7 +640,10 @@ class _CallScreenState extends State<CallScreen> {
                                 mirrorMode: VideoViewMirrorMode.mirror,
                               );
                             }
-                            return const _CameraOffTile(compact: true);
+                            return _CameraOffTile(
+                              compact: true,
+                              label: localFirstName,
+                            );
                           }(),
                         ),
                       ),
@@ -652,6 +687,12 @@ class _CallScreenState extends State<CallScreen> {
                           label: _camOn ? 'Video' : 'Off',
                           background: WhatsAppCallTheme.bar,
                           onTap: _toggleCam,
+                        ),
+                        _RoundCallButton(
+                          icon: Icons.tune_rounded,
+                          label: 'Audio',
+                          background: WhatsAppCallTheme.bar,
+                          onTap: _openAudioSheet,
                         ),
                         _RoundCallButton(
                           icon: Icons.call_end_rounded,
@@ -709,6 +750,195 @@ class _RoundCallButton extends StatelessWidget {
         Text(
           label,
           style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 11),
+        ),
+      ],
+    );
+  }
+}
+
+class _AudioSettingsSheet extends StatelessWidget {
+  const _AudioSettingsSheet({required this.controller});
+
+  final AudioController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          16 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Audio',
+                  style: TextStyle(
+                    color: WhatsAppCallTheme.strongText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _MicLevelStrip(level: controller.micLevel),
+                const SizedBox(height: 18),
+                const _SheetLabel(
+                  icon: Icons.record_voice_over_rounded,
+                  text: 'Volume de la traduction',
+                ),
+                Slider(
+                  value: controller.translatedVolume,
+                  onChanged: (v) => controller.setTranslatedVolume(v),
+                  activeColor: WhatsAppCallTheme.accent,
+                  inactiveColor: Colors.white24,
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  value: controller.duckingEnabled,
+                  onChanged: controller.setDuckingEnabled,
+                  activeTrackColor: WhatsAppCallTheme.accent,
+                  title: const Text(
+                    'Baisser la voix d’origine',
+                    style: TextStyle(color: WhatsAppCallTheme.strongText, fontSize: 15),
+                  ),
+                  subtitle: Text(
+                    controller.isDucking
+                        ? 'Active maintenant — traduction en cours'
+                        : 'Baisse l’original quand la traduction parle',
+                    style: const TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _RouteRow(controller: controller),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetLabel extends StatelessWidget {
+  const _SheetLabel({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: WhatsAppCallTheme.subtleText),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: const TextStyle(color: WhatsAppCallTheme.strongText, fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MicLevelStrip extends StatelessWidget {
+  const _MicLevelStrip({required this.level});
+  final double level;
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = level.clamp(0.0, 1.0).toDouble();
+    return Row(
+      children: [
+        const Icon(Icons.mic_rounded, size: 16, color: WhatsAppCallTheme.subtleText),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: clamped,
+              minHeight: 6,
+              backgroundColor: Colors.white12,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                clamped > 0.85 ? WhatsAppCallTheme.danger : WhatsAppCallTheme.accent,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteRow extends StatelessWidget {
+  const _RouteRow({required this.controller});
+  final AudioController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final route = controller.route;
+    final external = route == AudioRoute.wiredHeadset || route == AudioRoute.bluetooth;
+    final routeLabel = switch (route) {
+      AudioRoute.bluetooth => 'Bluetooth',
+      AudioRoute.wiredHeadset => 'Casque',
+      AudioRoute.speaker => 'Haut-parleur',
+      AudioRoute.earpiece => 'Écouteur',
+    };
+    final routeIcon = switch (route) {
+      AudioRoute.bluetooth => Icons.bluetooth_audio_rounded,
+      AudioRoute.wiredHeadset => Icons.headphones_rounded,
+      AudioRoute.speaker => Icons.volume_up_rounded,
+      AudioRoute.earpiece => Icons.phone_in_talk_rounded,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SheetLabel(icon: Icons.speaker_phone_rounded, text: 'Sortie audio'),
+        Row(
+          children: [
+            Icon(routeIcon, color: WhatsAppCallTheme.strongText),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                routeLabel,
+                style: const TextStyle(color: WhatsAppCallTheme.strongText, fontSize: 14),
+              ),
+            ),
+            Switch.adaptive(
+              value: controller.speakerOn,
+              onChanged: external ? null : controller.setSpeakerOn,
+              activeTrackColor: WhatsAppCallTheme.accent,
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            external
+                ? 'Sortie gérée par votre appareil tant qu’un casque ou Bluetooth est connecté.'
+                : 'Active le haut-parleur ou repasse à l’écouteur.',
+            style: const TextStyle(color: WhatsAppCallTheme.subtleText, fontSize: 12),
+          ),
         ),
       ],
     );
