@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/app_strings.dart';
+import '../services/call_alert.dart';
 import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/incoming_call_api.dart';
@@ -69,17 +70,22 @@ class _RootShellState extends State<RootShell> {
         : null;
     if (!mounted) return;
     _ringingDialogOpen = true;
+    final callerName = caller?.displayName.isNotEmpty == true
+        ? caller!.displayName
+        : AppStrings.t('incoming_someone');
+    // Web only: vibrate + flash the tab title until the user answers /
+    // dismisses. No-op on native (handled by the OS already).
+    CallAlert.start(callerName: callerName);
     final accepted = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => _IncomingCallDialog(
-        callerName: caller?.displayName.isNotEmpty == true
-            ? caller!.displayName
-            : AppStrings.t('incoming_someone'),
+        callerName: callerName,
         callerAvatarUrl: caller?.avatarUrl,
         callerAvatarColor: caller?.avatarColor,
       ),
     );
+    CallAlert.stop();
     _ringingDialogOpen = false;
     // Either side of the answer collapses the row so the caller knows.
     await IncomingCallApi.cancel(callId: call.id);
