@@ -70,6 +70,12 @@ abstract final class IncomingCallApi {
   /// realtime subscription will pick it up and show the incoming-call
   /// modal. Returns the inserted row id on success, or an error string
   /// describing why the insert failed (RLS, FK, network, …).
+  ///
+  /// Pre-flight: refuses to even hit the INSERT when the local Supabase
+  /// auth state would obviously cause an RLS rejection — no session, or
+  /// a [callerId] that doesn't match the JWT's `sub`. Saves a round-trip
+  /// and surfaces a concrete reason instead of the generic
+  /// "new row violates row-level security policy" Postgres returns.
   static Future<({String? id, String? error})> ring({
     required String callerId,
     required String calleeId,
@@ -80,6 +86,24 @@ abstract final class IncomingCallApi {
     }
     if (callerId.isEmpty || calleeId.isEmpty || callerId == calleeId) {
       return _ringResult(error: 'Invalid caller/callee ids');
+    }
+    final session = _c.auth.currentSession;
+    final authUid = _c.auth.currentUser?.id;
+    if (session == null || authUid == null || authUid.isEmpty) {
+      debugPrint('[ring] no auth session → aborting pre-flight');
+      return _ringResult(
+        error: 'Pas de session — déconnecte-toi puis reconnecte.',
+      );
+    }
+    if (authUid != callerId) {
+      debugPrint(
+        '[ring] callerId mismatch: arg=$callerId vs auth.uid=$authUid',
+      );
+      return _ringResult(
+        error:
+            'ID désynchronisé : callerId=$callerId ≠ auth.uid=$authUid. '
+            'Reconnecte-toi.',
+      );
     }
     try {
       final inserted = await _c
@@ -95,7 +119,7 @@ abstract final class IncomingCallApi {
       debugPrint('[ring] inserted incoming_call id=$id callee=$calleeId');
       return _ringResult(id: id);
     } catch (e) {
-      debugPrint('[ring] FAILED: $e');
+      debugPrint('[ring] FAILED (auth.uid=$authUid caller=$callerId): $e');
       return _ringResult(error: e.toString());
     }
   }
