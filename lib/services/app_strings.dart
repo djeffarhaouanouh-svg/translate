@@ -178,6 +178,7 @@ abstract final class AppStrings {
     'profile_call_language_warning':
         "Lors de tes appels tu devras parler uniquement {lang} pour que la traduction fonctionne.",
     'profile_edit': 'Modifier',
+    'profile_message': 'Message',
     'profile_loading': 'Chargement...',
     'profile_anonymous': 'Sans nom',
     'profile_email_private': 'Privé · visible uniquement par toi',
@@ -382,6 +383,7 @@ abstract final class AppStrings {
     'profile_call_language_warning':
         'During calls you have to speak only {lang} so the translation works.',
     'profile_edit': 'Edit',
+    'profile_message': 'Message',
     'profile_loading': 'Loading...',
     'profile_anonymous': 'No name',
     'profile_email_private': 'Private · only visible to you',
@@ -584,6 +586,7 @@ abstract final class AppStrings {
     'profile_call_language_warning':
         'Durante tus llamadas tendrás que hablar solo {lang} para que funcione la traducción.',
     'profile_edit': 'Editar',
+    'profile_message': 'Mensaje',
     'profile_loading': 'Cargando...',
     'profile_anonymous': 'Sin nombre',
 
@@ -688,6 +691,7 @@ abstract final class AppStrings {
     'profile_speaks': 'Spricht {lang}',
     'profile_no_language': 'Keine Sprache',
     'profile_edit': 'Bearbeiten',
+    'profile_message': 'Nachricht',
     'profile_loading': 'Lädt...',
     'profile_anonymous': 'Ohne Namen',
 
@@ -792,6 +796,7 @@ abstract final class AppStrings {
     'profile_speaks': 'Parla {lang}',
     'profile_no_language': 'Nessuna lingua',
     'profile_edit': 'Modifica',
+    'profile_message': 'Messaggio',
     'profile_loading': 'Caricamento...',
     'profile_anonymous': 'Senza nome',
 
@@ -896,6 +901,7 @@ abstract final class AppStrings {
     'profile_speaks': 'Fala {lang}',
     'profile_no_language': 'Sem língua',
     'profile_edit': 'Editar',
+    'profile_message': 'Mensagem',
     'profile_loading': 'A carregar...',
     'profile_anonymous': 'Sem nome',
 
@@ -1000,6 +1006,7 @@ abstract final class AppStrings {
     'profile_speaks': 'Spreekt {lang}',
     'profile_no_language': 'Geen taal',
     'profile_edit': 'Bewerken',
+    'profile_message': 'Bericht',
     'profile_loading': 'Laden...',
     'profile_anonymous': 'Geen naam',
 
@@ -1104,6 +1111,7 @@ abstract final class AppStrings {
     'profile_speaks': 'يتحدث {lang}',
     'profile_no_language': 'لا توجد لغة',
     'profile_edit': 'تعديل',
+    'profile_message': 'رسالة',
     'profile_loading': 'جارٍ التحميل...',
     'profile_anonymous': 'بدون اسم',
 
@@ -1208,6 +1216,7 @@ abstract final class AppStrings {
     'profile_speaks': 'Говорит на {lang}',
     'profile_no_language': 'Нет языка',
     'profile_edit': 'Изменить',
+    'profile_message': 'Сообщение',
     'profile_loading': 'Загрузка...',
     'profile_anonymous': 'Без имени',
 
@@ -1312,6 +1321,7 @@ abstract final class AppStrings {
     'profile_speaks': '说{lang}',
     'profile_no_language': '没有语言',
     'profile_edit': '编辑',
+    'profile_message': '消息',
     'profile_loading': '加载中...',
     'profile_anonymous': '无名',
 
@@ -1416,6 +1426,7 @@ abstract final class AppStrings {
     'profile_speaks': '{lang}を話します',
     'profile_no_language': '言語なし',
     'profile_edit': '編集',
+    'profile_message': 'メッセージ',
     'profile_loading': '読み込み中...',
     'profile_anonymous': '名前なし',
 
@@ -1520,6 +1531,7 @@ abstract final class AppStrings {
     'profile_speaks': '{lang}를 사용합니다',
     'profile_no_language': '언어 없음',
     'profile_edit': '편집',
+    'profile_message': '메시지',
     'profile_loading': '불러오는 중...',
     'profile_anonymous': '이름 없음',
 

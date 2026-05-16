@@ -12,6 +12,7 @@ import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
+import 'chat_thread_screen.dart';
 import 'friends_list_screen.dart';
 import 'likes_received_screen.dart';
 import 'onboarding_screen.dart';
@@ -195,6 +196,24 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Erreur : $e')));
     }
+  }
+
+  Future<void> _openChatWithPeer() async {
+    if (_deviceId.isEmpty || _targetId.isEmpty) return;
+    final ids = [_deviceId, _targetId]..sort();
+    final convId = 'dm-${ids[0]}-${ids[1]}';
+    final title = _displayName.isEmpty
+        ? AppStrings.t('profile_anonymous')
+        : _displayName;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatThreadScreen(
+          conversationId: convId,
+          title: title,
+          peerDeviceId: _targetId,
+        ),
+      ),
+    );
   }
 
   Future<void> _openFriendsList(FriendDirection direction) async {
@@ -599,6 +618,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onSettings: _openSettings,
                     onToggleBlock: _toggleBlock,
                     onTogglePeerLike: _togglePeerLike,
+                    onMessagePeer: _openChatWithPeer,
                   ),
                   const SizedBox(height: 20),
                   _LanguageCard(
@@ -887,6 +907,7 @@ class _IdentitySection extends StatelessWidget {
     this.onToggleBlock,
     this.iLikePeer = false,
     this.onTogglePeerLike,
+    this.onMessagePeer,
   });
 
   final String displayName;
@@ -917,6 +938,8 @@ class _IdentitySection extends StatelessWidget {
   /// on their photo cell.
   final bool iLikePeer;
   final VoidCallback? onTogglePeerLike;
+  /// Viewer-mode only: opens the DM thread with this peer.
+  final VoidCallback? onMessagePeer;
 
   // Pulled from AppStrings so it follows the user's chosen interface
   // language (fr / en / es supplied; others fall back to en).
@@ -1133,11 +1156,21 @@ class _IdentitySection extends StatelessWidget {
               ),
             ] else ...[
               Expanded(
-                child: _GradientActionButton(
-                  label: AppStrings.t(peerBlocked ? 'unblock' : 'block'),
-                  icon: peerBlocked ? Icons.lock_open : Icons.block,
-                  onTap: onToggleBlock ?? () {},
-                  destructive: !peerBlocked,
+                child: Column(
+                  children: [
+                    _GradientActionButton(
+                      label: AppStrings.t('profile_message'),
+                      icon: Icons.chat_bubble_outline,
+                      onTap: onMessagePeer ?? () {},
+                    ),
+                    const SizedBox(height: 10),
+                    _GradientActionButton(
+                      label: AppStrings.t(peerBlocked ? 'unblock' : 'block'),
+                      icon: peerBlocked ? Icons.lock_open : Icons.block,
+                      onTap: onToggleBlock ?? () {},
+                      destructive: !peerBlocked,
+                    ),
+                  ],
                 ),
               ),
             ],

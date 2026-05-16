@@ -217,7 +217,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -269,7 +269,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           height: 1,
           thickness: 1,
           color: Color(0xFF2F3D45),
-          indent: 76,
+          indent: 68,
         ),
         itemBuilder: (ctx, i) {
           final p = _friends[i];
@@ -356,7 +356,7 @@ class _FriendChatRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
         child: Row(
           children: [
             // Avatar = direct shortcut to the peer's profile (Insta-style).
