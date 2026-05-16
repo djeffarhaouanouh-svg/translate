@@ -16,6 +16,7 @@ import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/report_dialog.dart';
 import 'profile_screen.dart';
 
 /// One-to-one chat thread for [conversationId]. Title is the human-friendly
@@ -68,6 +69,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// Cached "have I blocked this peer" flag — refreshed on bootstrap and
   /// after every block / unblock toggle. Drives the menu label.
   bool _peerBlocked = false;
+
+  Future<void> _reportPeer() async {
+    if (_myId.isEmpty || widget.peerDeviceId.isEmpty) return;
+    final peerName = _peer?.displayName.isNotEmpty == true
+        ? _peer!.displayName
+        : widget.title;
+    await showReportDialog(
+      context,
+      reporterId: _myId,
+      reportedId: widget.peerDeviceId,
+      peerName: peerName,
+    );
+  }
 
   Future<void> _toggleBlockPeer() async {
     if (_myId.isEmpty || widget.peerDeviceId.isEmpty) return;
@@ -327,6 +341,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         ),
         peerBlocked: _peerBlocked,
         onToggleBlock: _toggleBlockPeer,
+        onReport: _reportPeer,
       ),
       body: Column(
         children: [
@@ -388,6 +403,7 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onViewProfile,
     required this.peerBlocked,
     required this.onToggleBlock,
+    required this.onReport,
   });
   final String title;
   final RemoteProfile? peer;
@@ -395,6 +411,7 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onViewProfile;
   final bool peerBlocked;
   final VoidCallback onToggleBlock;
+  final VoidCallback onReport;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -437,9 +454,24 @@ class _ThreadHeader extends StatelessWidget implements PreferredSizeWidget {
           icon: const Icon(Icons.more_vert),
           color: WhatsAppCallTheme.bar,
           onSelected: (value) {
+            if (value == 'report') onReport();
             if (value == 'block') onToggleBlock();
           },
           itemBuilder: (ctx) => [
+            PopupMenuItem<String>(
+              value: 'report',
+              child: Row(
+                children: [
+                  const Icon(Icons.flag_outlined,
+                      size: 18, color: Color(0xFFE53935)),
+                  const SizedBox(width: 10),
+                  Text(
+                    AppStrings.t('report'),
+                    style: const TextStyle(color: Color(0xFFE53935)),
+                  ),
+                ],
+              ),
+            ),
             PopupMenuItem<String>(
               value: 'block',
               child: Row(
