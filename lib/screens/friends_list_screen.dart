@@ -7,6 +7,7 @@ import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
+import 'profile_screen.dart';
 
 /// List of accounts behind the Followers / Following counts on ProfileScreen.
 /// Each row shows the peer's avatar + name + language. When viewing
@@ -159,6 +160,11 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
                 _myFollowingPendingIds.contains(p.id);
         return _FriendRow(
           profile: p,
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => ProfileScreen(userId: p.id),
+            ),
+          ),
           trailing: showFollowBack
               ? _FollowBackButton(onTap: () => _followBack(p))
               : showPendingPill
@@ -171,10 +177,15 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
 }
 
 class _FriendRow extends StatelessWidget {
-  const _FriendRow({required this.profile, required this.trailing});
+  const _FriendRow({
+    required this.profile,
+    required this.trailing,
+    required this.onTap,
+  });
 
   final RemoteProfile profile;
   final Widget trailing;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -185,58 +196,64 @@ class _FriendRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Container(
-        height: 72,
-        decoration: BoxDecoration(
-          color: WhatsAppCallTheme.bar,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
-          children: [
-            ProfileAvatar(
-              displayName: name,
-              avatarUrl: profile.avatarUrl,
-              avatarColorHex: profile.avatarColor,
-              size: 44,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
+      child: Material(
+        color: WhatsAppCallTheme.bar,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            height: 72,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: false,
-                    style: const TextStyle(
-                      color: WhatsAppCallTheme.strongText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
+                  ProfileAvatar(
+                    displayName: name,
+                    avatarUrl: profile.avatarUrl,
+                    avatarColorHex: profile.avatarColor,
+                    size: 44,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                          style: const TextStyle(
+                            color: WhatsAppCallTheme.strongText,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (lang != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '${lang.flag}  ${lang.label}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                            style: const TextStyle(
+                              color: WhatsAppCallTheme.subtleText,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  if (lang != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      '${lang.flag}  ${lang.label}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                      style: const TextStyle(
-                        color: WhatsAppCallTheme.subtleText,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                  const SizedBox(width: 8),
+                  trailing,
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            trailing,
-          ],
+          ),
         ),
       ),
     );
