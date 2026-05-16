@@ -15,6 +15,7 @@ import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/report_dialog.dart';
 import 'chat_thread_screen.dart';
 import 'profile_screen.dart';
 
@@ -192,6 +193,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _reportPeer(RemoteProfile peer) async {
+    if (_myId.isEmpty) return;
+    await showReportDialog(
+      context,
+      reporterId: _myId,
+      reportedId: peer.id,
+      peerName: peer.displayName.isEmpty
+          ? AppStrings.t('incoming_someone')
+          : peer.displayName,
+    );
+  }
+
   Future<void> _blockPeer(RemoteProfile peer) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -317,6 +330,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             onTap: () => _openThread(p),
             onViewProfile: () => _viewProfile(p),
             onBlock: () => _blockPeer(p),
+            onReport: () => _reportPeer(p),
           );
         },
       ),
@@ -333,6 +347,7 @@ class _FriendChatRow extends StatelessWidget {
     required this.onTap,
     required this.onViewProfile,
     required this.onBlock,
+    required this.onReport,
   });
   final RemoteProfile profile;
   final ChatMessage? lastMessage;
@@ -343,6 +358,7 @@ class _FriendChatRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onViewProfile;
   final VoidCallback onBlock;
+  final VoidCallback onReport;
 
   String _formatTime(DateTime dt) {
     final now = DateTime.now();
@@ -502,6 +518,7 @@ class _FriendChatRow extends StatelessWidget {
                       color: WhatsAppCallTheme.bar,
                       onSelected: (v) {
                         if (v == 'profile') onViewProfile();
+                        if (v == 'report') onReport();
                         if (v == 'block') onBlock();
                       },
                       itemBuilder: (ctx) => [
@@ -516,6 +533,19 @@ class _FriendChatRow extends StatelessWidget {
                               Text(AppStrings.t('view_profile'),
                                   style: const TextStyle(
                                       color: WhatsAppCallTheme.strongText)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'report',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.flag_outlined,
+                                  size: 18, color: Color(0xFFE53935)),
+                              const SizedBox(width: 10),
+                              Text(AppStrings.t('report'),
+                                  style: const TextStyle(
+                                      color: Color(0xFFE53935))),
                             ],
                           ),
                         ),

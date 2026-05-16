@@ -15,6 +15,7 @@ import '../services/user_prefs.dart';
 import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/report_dialog.dart';
 import 'chat_thread_screen.dart';
 import 'friends_list_screen.dart';
 import 'likes_received_screen.dart';
@@ -547,6 +548,19 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     });
   }
 
+  Future<void> _reportPeer() async {
+    if (!_isViewingOther || _deviceId.isEmpty || _targetId.isEmpty) return;
+    final peerName = _displayName.isEmpty
+        ? AppStrings.t('incoming_someone')
+        : _displayName;
+    await showReportDialog(
+      context,
+      reporterId: _deviceId,
+      reportedId: _targetId,
+      peerName: peerName,
+    );
+  }
+
   Future<void> _openSettings() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
@@ -576,6 +590,33 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 style: const TextStyle(
                     fontSize: 18, fontWeight: FontWeight.w700),
               ),
+              actions: [
+                PopupMenuButton<String>(
+                  tooltip: AppStrings.t('tooltip_more'),
+                  icon: const Icon(Icons.more_vert),
+                  color: WhatsAppCallTheme.bar,
+                  onSelected: (v) {
+                    if (v == 'report') _reportPeer();
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem<String>(
+                      value: 'report',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.flag_outlined,
+                              size: 18, color: Color(0xFFE53935)),
+                          const SizedBox(width: 10),
+                          Text(
+                            AppStrings.t('report'),
+                            style: const TextStyle(
+                                color: Color(0xFFE53935)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             )
           : null,
       body: SafeArea(
