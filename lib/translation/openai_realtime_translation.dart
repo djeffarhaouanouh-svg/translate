@@ -33,11 +33,6 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   RTCPeerConnection? _pc;
   RTCVideoRenderer? _renderer;
   MediaStream? _localStream;
-  /// Direct reference to the audio track of the translated stream — used
-  /// to apply volume changes, since going through the renderer was
-  /// unreliable across platforms (the renderer is a near-invisible
-  /// RTCVideoView and the audio actually plays via the PC).
-  MediaStreamTrack? _translatedAudioTrack;
   Timer? _refreshTimer;
   /// Recovers if the one-shot refresh timer was never rescheduled (early returns, races).
   Timer? _watchdogTimer;
@@ -90,12 +85,12 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   Future<void> setTranslatedAudioVolume(double volume) async {
     final clamped = volume.clamp(0.0, 1.0);
     _translatedVolume = clamped;
-    final t = _translatedAudioTrack;
-    if (t == null) return;
+    final r = _renderer;
+    if (r == null) return;
     try {
-      await Helper.setVolume(clamped, t);
+      await r.setVolume(clamped);
     } catch (e) {
-      debugPrint('OpenAi translation: setVolume on track failed: $e');
+      debugPrint('OpenAi translation: setVolume on renderer failed: $e');
     }
   }
 
@@ -367,7 +362,6 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     // the local mic out of its publication. Disposing the local stream
     // and closing the PC above is enough to release the clone.
 
-    _translatedAudioTrack = null;
     final r = _renderer;
     _renderer = null;
     if (r != null) {
@@ -455,20 +449,10 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
       pc.onTrack = (RTCTrackEvent event) {
         if (event.streams.isEmpty) return;
-        final stream = event.streams[0];
-        playbackRenderer.srcObject = stream;
-        final audioTracks = stream.getAudioTracks();
-        if (audioTracks.isNotEmpty) {
-          _translatedAudioTrack = audioTracks.first;
-          // Re-apply the user's preferred volume on every new media stream
-          // (refresh / reconnect rebuilds the source).
-          unawaited(
-            Helper.setVolume(_translatedVolume, _translatedAudioTrack!)
-                .catchError((e) {
-              debugPrint('OpenAi translation: initial setVolume failed: $e');
-            }),
-          );
-        }
+        playbackRenderer.srcObject = event.streams[0];
+        // Re-apply the user's preferred volume on every new media stream
+        // (refresh / reconnect rebuilds the renderer source).
+        unawaited(playbackRenderer.setVolume(_translatedVolume));
         notifyListeners();
       };
 

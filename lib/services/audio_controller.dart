@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -31,8 +32,10 @@ class AudioController extends ChangeNotifier {
   );
 
   AudioRoute _route = AudioRoute.speaker;
+  double _micLevel = 0;
   bool _isDucking = false;
   Timer? _duckRelease;
+  Timer? _micTimer;
   StreamSubscription<List<MediaDevice>>? _deviceSub;
   bool _bound = false;
 
@@ -53,6 +56,10 @@ class AudioController extends ChangeNotifier {
   /// for UI but don't try to override it.
   AudioRoute get route => _route;
 
+  /// Local microphone level in [0, 1], sampled periodically. Useful as
+  /// a tiny VU-meter so the user can confirm they are captured.
+  double get micLevel => _micLevel;
+
   /// Whether ducking is currently dampening the original audio.
   bool get isDucking => _isDucking;
 
@@ -71,6 +78,9 @@ class AudioController extends ChangeNotifier {
     _deviceSub = Hardware.instance.onDeviceChange.stream.listen((_) {
       _refreshRouteFromDevices();
     });
+    _micTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
+      _sampleMicLevel();
+    });
     _bound = true;
     notifyListeners();
   }
@@ -80,6 +90,7 @@ class AudioController extends ChangeNotifier {
   void dispose() {
     _bound = false;
     _duckRelease?.cancel();
+    _micTimer?.cancel();
     unawaited(_deviceSub?.cancel());
     _deviceSub = null;
     _room = null;
@@ -203,6 +214,25 @@ class AudioController extends ChangeNotifier {
     }
     if (next != _route) {
       _route = next;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _sampleMicLevel() async {
+    final room = _room;
+    if (room == null) {
+      if (_micLevel != 0) {
+        _micLevel = 0;
+        notifyListeners();
+      }
+      return;
+    }
+    final lp = room.localParticipant;
+    if (lp == null) return;
+    final level = lp.audioLevel;
+    final smoothed = math.max(level, _micLevel * 0.7);
+    if ((smoothed - _micLevel).abs() > 0.01) {
+      _micLevel = smoothed;
       notifyListeners();
     }
   }
