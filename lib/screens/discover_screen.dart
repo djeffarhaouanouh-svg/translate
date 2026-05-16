@@ -13,6 +13,7 @@ import '../services/like_api.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
+import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../widgets/profile_avatar.dart';
 
@@ -51,6 +52,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   Timer? _searchDebounce;
+  Timer? _pollTimer;
   String _myId = '';
   bool _searching = false;
   List<RemoteProfile> _searchResults = const [];
@@ -80,6 +82,31 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         }
       });
     _bootstrapSearch();
+    // Web: periodically refresh friendships + likes so a peer accepting
+    // / blocking / liking gets reflected on the Discover cards within
+    // ~10s. The feed itself is not re-fetched (it'd reset the swipe
+    // position) — only the lightweight signal queries.
+    _pollTimer = WebPoll.every(
+      const Duration(seconds: 10),
+      _refreshLiveSignals,
+    );
+  }
+
+  /// Lightweight refresh: only re-pulls friendship rows + likes I've
+  /// given. Keeps the card stack and `_topIndex` exactly where they are.
+  Future<void> _refreshLiveSignals() async {
+    if (_myId.isEmpty || !isSupabaseReady) return;
+    try {
+      final mine = await FriendshipApi.fetchMine(_myId);
+      final liked = await LikeApi.fetchMyLikedIds(_myId);
+      if (!mounted) return;
+      setState(() {
+        _myFriendships = mine;
+        _likedIds = liked;
+      });
+    } catch (_) {
+      // Polling errors are non-fatal — next tick will retry.
+    }
   }
 
   Future<void> _bootstrapSearch() async {
@@ -143,6 +170,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void dispose() {
     _ctrl.dispose();
     _searchDebounce?.cancel();
+    _pollTimer?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
