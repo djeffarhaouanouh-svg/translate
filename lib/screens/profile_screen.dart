@@ -1281,7 +1281,11 @@ class _PhotoCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     final tappable = !viewerMode;
-    final showLikesBadge = !viewerMode && onTapLikes != null;
+    // Only render the ❤ badge when there's actually a photo to attach it
+    // to (else it floats above an empty "add photo" cell and looks broken)
+    // and when there's at least one like to show.
+    final showLikesBadge =
+        !viewerMode && onTapLikes != null && hasPhoto && likesCount > 0;
     // In viewer mode, render a heart button on the photo so I can like
     // the peer right from their profile. Hidden when there's no photo
     // (the empty cell is already a "image_not_supported" glyph).

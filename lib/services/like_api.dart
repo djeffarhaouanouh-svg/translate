@@ -110,13 +110,23 @@ abstract final class LikeApi {
     }
   }
 
-  /// Wipe every like row pointing at [userId]. Called when the user deletes
-  /// their Discover photo so the heart badge — which represents likes
-  /// received on that photo — doesn't linger over an empty cell.
+  /// Wipe every like row pointing at the current auth user. Called when
+  /// the user deletes their Discover photo so the heart badge — which
+  /// represents likes received on that photo — doesn't linger over an
+  /// empty cell.
+  ///
+  /// Goes through the `delete_my_received_likes` SECURITY DEFINER RPC
+  /// because the table-level RLS only authorises the *liker* to delete a
+  /// row; the *liked* party can't, even for their own received likes. The
+  /// RPC derives the target id from `auth.uid()` server-side so it can
+  /// only ever wipe the caller's own rows.
+  ///
+  /// `userId` is kept in the signature for caller convenience / clarity
+  /// but isn't actually sent — see the function definition.
   static Future<void> deleteAllLikersOf(String userId) async {
     if (!isSupabaseReady || userId.isEmpty) return;
     try {
-      await _c.from('likes').delete().eq('liked', userId);
+      await _c.rpc('delete_my_received_likes');
     } catch (e) {
       debugPrint('LikeApi.deleteAllLikersOf failed: $e');
       rethrow;
