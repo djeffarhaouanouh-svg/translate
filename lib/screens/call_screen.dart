@@ -183,16 +183,18 @@ class _CallScreenState extends State<CallScreen> {
     try {
       await room.connect(widget.wsUrl, widget.jwt);
       await room.localParticipant?.setCameraEnabled(true);
-      // Browser-native voice processing on: echo-cancellation, noise
-      // suppression, auto-gain. Same defaults WhatsApp / Zoom / Meet
-      // use. If the "only 1 of 2 can speak at a time" half-duplex bug
-      // re-appears, flip these three back to false.
+      // EC + NS on, AGC OFF. Rationale: the translation pipeline plays
+      // a second audio stream on the speakers that the browser's EC
+      // doesn't fully account for, so any captured leak goes back into
+      // LiveKit. AGC then amplifies that leak each loop and the
+      // feedback runs away to infinity. Without AGC the captured leak
+      // stays below its source and decays naturally.
       await room.localParticipant?.setMicrophoneEnabled(
         true,
         audioCaptureOptions: const AudioCaptureOptions(
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
         ),
       );
       // First attach with whatever remote-lang we already know (often nothing
