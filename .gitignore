@@ -38,6 +38,10 @@ backend/.env
 backend/node_modules/
 /node_modules/
 /coverage/
+# Firebase admin SDK service-account JSONs — Railway env var only,
+# NEVER committed. Any leak gives full admin access to the project.
+*-firebase-adminsdk-*.json
+**/firebase-adminsdk-*.json
 
 # Symbolication related
 app.*.symbols
