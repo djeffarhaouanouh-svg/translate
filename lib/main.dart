@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/root_shell.dart';
@@ -21,6 +24,19 @@ Future<void> main() async {
   // Supabase keys come from --dart-define at build time (Railway / IDE
   // launch.json). No .env loading on the deployed web build.
   await initSupabase();
+  // Native push (FCM). Best-effort: a missing google-services.json /
+  // GoogleService-Info.plist on dev builds shouldn't crash the app —
+  // just skip Firebase init and the notification_client_io will fail
+  // its registration silently.
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e) {
+      debugPrint('Firebase init failed: $e');
+    }
+  }
   runApp(const LiveKitTranslateApp());
 }
 

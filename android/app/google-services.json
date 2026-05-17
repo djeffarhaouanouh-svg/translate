@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "368302337524",
+    "project_id": "swayco-bfe93",
+    "storage_bucket": "swayco-bfe93.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:368302337524:android:4973f39f34292e459cdda1",
+        "android_client_info": {
+          "package_name": "com.translate.livekit.livekit_translate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVOs0pE6YPrkMfBCpb90VAbivo6ITFrK0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
