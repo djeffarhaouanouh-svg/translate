@@ -47,6 +47,9 @@ RUN npm ci --omit=dev
 COPY backend/server.js ./server.js
 COPY backend/notify.js ./notify.js
 COPY --from=flutter-build /app/build/web ./web
+# Static legal site (Terms / Privacy / Help) — served by server.js at
+# /terms, /privacy, /help, /legal alongside the Flutter web bundle.
+COPY legal-site ./legal-site
 
 EXPOSE 8080
 ENV PORT=8080

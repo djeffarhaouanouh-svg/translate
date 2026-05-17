@@ -62,6 +62,13 @@ const webPath = path.join(__dirname, 'web');
 const webIndex = path.join(webPath, 'index.html');
 const hasWebUi = fs.existsSync(webIndex);
 
+// Static legal site (Terms / Privacy / Help) lives alongside the
+// Flutter web bundle. The Flutter app's Settings buttons link to
+// /terms, /privacy, /help — those routes must serve the HTML from
+// this folder, NOT fall through to the Flutter SPA fallback.
+const legalPath = path.join(__dirname, 'legal-site');
+const hasLegalSite = fs.existsSync(path.join(legalPath, 'terms.html'));
+
 function assertEnv() {
   const missing = [];
   if (!LIVEKIT_URL) missing.push('LIVEKIT_URL');
@@ -378,6 +385,27 @@ app.post('/api/notify', async (req, res) => {
   }
 });
 
+// Legal site — Terms, Privacy, Help. Must be registered BEFORE the
+// Flutter SPA fallback so /terms etc. serve the HTML files rather
+// than falling through to the Flutter index.html.
+if (hasLegalSite) {
+  // CSS + future assets under /legal-assets/* (absolute path that
+  // can't collide with anything Flutter ships).
+  app.use('/legal-assets', express.static(legalPath));
+  // Clean URLs matching what the Flutter Settings screen links to.
+  const legalRoutes = {
+    '/legal': 'index.html',
+    '/terms': 'terms.html',
+    '/privacy': 'privacy.html',
+    '/help': 'help.html',
+  };
+  for (const [route, file] of Object.entries(legalRoutes)) {
+    app.get(route, (_req, res) =>
+      res.sendFile(path.join(legalPath, file)),
+    );
+  }
+}
+
 if (hasWebUi) {
   app.use(express.static(webPath));
   app.use((req, res, next) => {
@@ -389,7 +417,12 @@ if (hasWebUi) {
       p.startsWith('/livekit') ||
       p === '/health' ||
       p.startsWith('/translation') ||
-      p.startsWith('/api')
+      p.startsWith('/api') ||
+      p.startsWith('/legal-assets') ||
+      p === '/legal' ||
+      p === '/terms' ||
+      p === '/privacy' ||
+      p === '/help'
     ) {
       return next();
     }
