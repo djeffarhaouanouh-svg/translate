@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_strings.dart';
 import '../services/auth_service.dart';
 import '../services/block_api.dart';
 import '../services/device_id.dart';
+import '../services/notification_client.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../theme/whatsapp_call_theme.dart';
@@ -160,7 +163,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _busy = true);
     try {
       final uid = await DeviceId.getOrCreate();
+      // 1. Drop the user's push targets so the FCM token / web push
+      //    subscription doesn't outlive the account.
+      await NotificationClient.unregister(uid);
+      // 2. Wipe the legacy local profile copy.
       await ProfileApi.deleteMyProfile(uid);
+      // 3. Server-side wipe via the SECURITY DEFINER RPC: deletes the
+      //    row in auth.users and cascades to every public.* table that
+      //    references it. Required by App Store §5.1.1(v) +
+      //    Play Store UGC rules — partial deletes (just the profile)
+      //    aren't acceptable.
+      if (isSupabaseReady) {
+        await Supabase.instance.client.rpc('delete_my_account');
+      }
+      // 4. Sign out locally so the app reroutes to the login screen.
       await AuthService.signOut();
     } catch (e) {
       if (!mounted) return;
@@ -240,10 +256,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _manageSubscription() =>
       _toast(AppStrings.t('settings_subscription_appstore'));
   void _restorePurchases() => _toast(AppStrings.t('settings_restore_soon'));
-  void _openHelp() => _toast(AppStrings.t('settings_help_soon'));
-  void _contactSupport() => _toast(AppStrings.t('settings_contact_soon'));
-  void _openTerms() => _toast(AppStrings.t('settings_terms_soon'));
-  void _openPrivacy() => _toast(AppStrings.t('settings_privacy_soon'));
+  void _openHelp() => _openExternal('https://swayco.fr/help');
+  void _contactSupport() => _openExternal('mailto:support@swayco.fr');
+  void _openTerms() => _openExternal('https://swayco.fr/terms');
+  void _openPrivacy() => _openExternal('https://swayco.fr/privacy');
+
+  /// Try to open [url] in the device browser (or mail client for
+  /// `mailto:` URLs). Falls back to a toast if the device can't handle
+  /// the URI — never crashes.
+  Future<void> _openExternal(String url) async {
+    final uri = Uri.parse(url);
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      _toast(url);
+    }
+  }
 
   // ───── Helpers ─────────────────────────────────────────────────────────
 
