@@ -45,6 +45,7 @@ COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY backend/server.js ./server.js
+COPY backend/notify.js ./notify.js
 COPY --from=flutter-build /app/build/web ./web
 
 EXPOSE 8080
