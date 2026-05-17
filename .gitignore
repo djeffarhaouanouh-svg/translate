@@ -43,6 +43,15 @@ backend/node_modules/
 *-firebase-adminsdk-*.json
 **/firebase-adminsdk-*.json
 
+# Android release signing — the keystore + its password file must
+# never be committed. Losing them means losing the ability to update
+# the app on Play Store, leaking them means anyone can ship malware
+# under your name.
+android/key.properties
+android/*.jks
+**/key.properties
+**/*.jks
+
 # Symbolication related
 app.*.symbols
 
