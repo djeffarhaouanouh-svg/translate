@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Politique de confidentialité — Swayco</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <div class="logo">🌐</div>
+      <div class="brand">
+        <h1>Swayco</h1>
+        <p>Appels vidéo avec traduction temps réel</p>
+      </div>
+    </div>
+  </header>
+
+  <nav class="site-nav">
+    <div class="container">
+      <a href="index.html">Accueil</a>
+      <span class="sep">›</span>
+      <span class="current">Politique de confidentialité</span>
+    </div>
+  </nav>
+
+  <main>
+    <div class="container">
+      <h1 class="page-title">Politique de confidentialité</h1>
+      <p class="page-date">Dernière mise à jour : 17 mai 2026</p>
+
+      <div class="box box-primary">
+        <p>Cette politique décrit quelles données Swayco collecte, comment elles sont utilisées, où elles sont stockées et quels sont vos droits sur ces données. Elle est conforme au Règlement Général sur la Protection des Données (RGPD).</p>
+      </div>
+
+      <h2>1. Identité du responsable de traitement</h2>
+      <p><strong>Swayco</strong> — appels vidéo avec traduction temps réel.<br>
+      Contact : <a href="mailto:support@swayco.fr">support@swayco.fr</a></p>
+
+      <h2>2. Données collectées</h2>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Donnée</th>
+            <th>Finalité</th>
+            <th>Base légale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Adresse e-mail</td>
+            <td>Authentification, récupération du compte, communication de sécurité</td>
+            <td>Exécution du contrat (art. 6.1.b RGPD)</td>
+          </tr>
+          <tr>
+            <td>Prénom (display name)</td>
+            <td>Identification entre utilisateurs</td>
+            <td>Exécution du contrat</td>
+          </tr>
+          <tr>
+            <td>Photo de profil et photo Discover</td>
+            <td>Affichage de votre profil aux autres utilisateurs</td>
+            <td>Consentement (vous l'avez téléversée volontairement)</td>
+          </tr>
+          <tr>
+            <td>Langue parlée</td>
+            <td>Configuration de la traduction simultanée</td>
+            <td>Exécution du contrat</td>
+          </tr>
+          <tr>
+            <td>Messages échangés</td>
+            <td>Affichage de votre historique de conversation</td>
+            <td>Exécution du contrat</td>
+          </tr>
+          <tr>
+            <td>Données techniques d'appel (room id, durée)</td>
+            <td>Acheminement de l'appel et facturation du temps de traduction</td>
+            <td>Intérêt légitime (art. 6.1.f) — fonctionnement technique</td>
+          </tr>
+          <tr>
+            <td>Audio et vidéo pendant un appel</td>
+            <td>Acheminement en temps réel uniquement — <strong>non enregistré ni stocké</strong></td>
+            <td>Exécution du contrat</td>
+          </tr>
+          <tr>
+            <td>Audio transmis à OpenAI pour traduction</td>
+            <td>Traduction simultanée pendant un appel</td>
+            <td>Exécution du contrat — audio traité en flux, non conservé par Swayco</td>
+          </tr>
+          <tr>
+            <td>Identifiant Firebase (FCM token) et endpoint Web Push</td>
+            <td>Envoi de notifications push (messages, appels entrants, likes)</td>
+            <td>Consentement (vous l'avez accepté au premier login)</td>
+          </tr>
+          <tr>
+            <td>Préférences locales (langue UI, son, dernier seen)</td>
+            <td>Personnalisation de l'expérience sur votre appareil</td>
+            <td>Stockées localement sur votre appareil uniquement</td>
+          </tr>
+          <tr>
+            <td>Signalements et blocages d'utilisateurs</td>
+            <td>Modération de la communauté</td>
+            <td>Intérêt légitime</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>3. Données <em>non</em> collectées</h2>
+      <p>Swayco ne collecte ni votre géolocalisation, ni vos contacts, ni votre historique de navigation, ni aucun identifiant publicitaire (IDFA / GAID). Aucun cookie de tracking n'est utilisé sur la version web.</p>
+
+      <h2>4. Sous-traitants</h2>
+      <p>Swayco fait appel à des prestataires techniques tiers pour fournir le service. Chacun est encadré par un contrat de sous-traitance conforme au RGPD :</p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Sous-traitant</th>
+            <th>Rôle</th>
+            <th>Localisation des serveurs</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Supabase, Inc.</td>
+            <td>Base de données, authentification, stockage des photos</td>
+            <td>Région choisie au déploiement (UE recommandée)</td>
+          </tr>
+          <tr>
+            <td>LiveKit, Inc.</td>
+            <td>Acheminement des flux audio et vidéo des appels</td>
+            <td>Réseau mondial — média non stocké</td>
+          </tr>
+          <tr>
+            <td>OpenAI, L.L.C.</td>
+            <td>Traduction simultanée par IA (gpt-realtime-translate)</td>
+            <td>États-Unis — données transmises en flux pour traitement temps réel</td>
+          </tr>
+          <tr>
+            <td>Google Firebase (Cloud Messaging)</td>
+            <td>Envoi de notifications push sur Android et iOS</td>
+            <td>États-Unis et Europe</td>
+          </tr>
+          <tr>
+            <td>Railway</td>
+            <td>Hébergement de notre serveur d'API</td>
+            <td>États-Unis et Europe</td>
+          </tr>
+          <tr>
+            <td>Apple Inc. et Google LLC</td>
+            <td>Distribution de l'application sur App Store et Play Store</td>
+            <td>Selon le store</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>5. Durée de conservation</h2>
+      <ul>
+        <li><strong>Profil et messages</strong> : conservés tant que votre compte est actif. Effacés immédiatement à la suppression du compte.</li>
+        <li><strong>Audio et vidéo d'appel</strong> : non enregistrés, transmis en flux uniquement.</li>
+        <li><strong>Logs techniques (durée d'appel, erreurs)</strong> : conservés 30 jours pour le débogage puis effacés.</li>
+        <li><strong>Données de modération (signalements résolus)</strong> : conservées 12 mois après résolution puis effacées.</li>
+      </ul>
+
+      <h2>6. Vos droits (RGPD)</h2>
+      <p>Vous disposez à tout moment des droits suivants :</p>
+      <ul>
+        <li><strong>Droit d'accès</strong> : obtenir une copie de toutes les données vous concernant.</li>
+        <li><strong>Droit de rectification</strong> : corriger une donnée inexacte directement dans l'app ou par e-mail.</li>
+        <li><strong>Droit à l'effacement</strong> : supprimer votre compte (et donc toutes vos données) depuis <strong>Paramètres → Supprimer le compte</strong>. L'effacement est immédiat et irréversible.</li>
+        <li><strong>Droit à la portabilité</strong> : recevoir vos données dans un format lisible par machine, sur simple demande à <a href="mailto:support@swayco.fr">support@swayco.fr</a>.</li>
+        <li><strong>Droit d'opposition</strong> : refuser certains traitements (notamment les notifications push, désactivables dans les réglages système).</li>
+        <li><strong>Droit de réclamation</strong> : déposer une plainte auprès de la CNIL (<a href="https://www.cnil.fr" target="_blank" rel="noopener">cnil.fr</a>).</li>
+      </ul>
+
+      <h2>7. Mineurs</h2>
+      <p>Swayco est réservé aux utilisateurs âgés de 17 ans ou plus. Si nous apprenons qu'un compte appartient à une personne plus jeune, il est supprimé immédiatement.</p>
+
+      <h2>8. Sécurité</h2>
+      <p>Toutes les communications avec nos serveurs sont chiffrées en TLS. Les mots de passe sont hachés. Les clés API sensibles ne sont jamais embarquées dans l'application ; elles vivent uniquement côté serveur. Aucune méthode n'est cependant inviolable à 100 % — si vous suspectez une compromission de votre compte, contactez-nous immédiatement.</p>
+
+      <h2>9. Modifications</h2>
+      <p>Cette politique peut évoluer. Toute modification substantielle sera annoncée dans l'application au moins 7 jours avant son entrée en vigueur, et la date de mise à jour en haut de cette page sera modifiée.</p>
+
+      <h2>10. Contact</h2>
+      <p>Pour toute question relative à vos données personnelles ou à l'exercice de vos droits : <a href="mailto:support@swayco.fr">support@swayco.fr</a>.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="index.html">Accueil</a>
+        <a href="terms.html">Conditions</a>
+        <a href="privacy.html">Confidentialité</a>
+        <a href="help.html">Aide</a>
+        <a href="mailto:support@swayco.fr">Contact</a>
+      </div>
+      <hr class="footer-divider">
+      <p class="footer-meta">© 2026 Swayco. Tous droits réservés.</p>
+    </div>
+  </footer>
+</body>
+</html>
