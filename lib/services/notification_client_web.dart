@@ -48,8 +48,11 @@ abstract final class NotificationClient {
           )
           .toDart;
 
-      // Wait until the SW is actually ready before subscribing.
-      await sw.ready.toDart;
+      // Don't await `sw.ready` here — it resolves only when a service
+      // worker controls the current page's scope, but ours is scoped
+      // to /push/ to avoid colliding with Flutter web's own SW at /.
+      // The PushManager on the returned registration is usable as soon
+      // as the SW is installed (no need to wait for `active`).
 
       // Existing subscription? Reuse it — re-registering is free side
       // of the network call but it keeps `updated_at` fresh in our DB.
