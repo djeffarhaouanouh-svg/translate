@@ -14,12 +14,15 @@ import 'profile_api.dart';
 /// it by editing the request. If/when that matters, move the decrement
 /// into a Postgres `SECURITY DEFINER` function and call it via RPC.
 abstract final class UsageTracker {
-  /// TEMPORARY: when true, every public method becomes a no-op and the
-  /// reactive notifiers stay at "infinite credits / never exhausted".
-  /// Used to remove the time gate while testing long calls (~1h+) end-
-  /// to-end. Flip back to false and redeploy to re-enable the credit
-  /// system before going to production.
-  static const bool _kDisabled = true;
+  /// Master switch for the credit / call-time gating system. Flipping
+  /// to `true` makes every public method a no-op and pins the reactive
+  /// notifiers at "infinite credits / never exhausted" — useful when
+  /// running long end-to-end tests without burning through quota.
+  ///
+  /// Production: `false`. Each call deducts seconds against the user's
+  /// credit balance via the SECURITY DEFINER RPC the implementation
+  /// flushes to every [_tickSeconds] tick.
+  static const bool _kDisabled = false;
 
   /// Public mirror so callers (CallScreen) can also skip their own
   /// credit gates when tracking is off.
