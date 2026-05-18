@@ -47,6 +47,10 @@ RUN npm ci --omit=dev
 COPY backend/server.js ./server.js
 COPY backend/notify.js ./notify.js
 COPY backend/stripe.js ./stripe.js
+COPY backend/translation_agent.js ./translation_agent.js
+COPY backend/voxtral_realtime_client.js ./voxtral_realtime_client.js
+COPY backend/mistral_text_translate.js ./mistral_text_translate.js
+COPY backend/mistral_tts_client.js ./mistral_tts_client.js
 COPY --from=flutter-build /app/build/web ./web
 # Static legal site (Terms / Privacy / Help) — served by server.js at
 # /terms, /privacy, /help, /legal alongside the Flutter web bundle.
