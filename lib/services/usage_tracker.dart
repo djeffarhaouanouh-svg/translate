@@ -100,19 +100,24 @@ abstract final class UsageTracker {
   }
 
   static Future<void> _flush() async {
-    if (_userId.isEmpty || _pendingSeconds <= 0) {
+    // Capture state synchronously BEFORE any await so a concurrent
+    // start()/stop() can't change _userId out from under us.
+    final userId = _userId;
+    if (userId.isEmpty || _pendingSeconds <= 0) {
       debugPrint(
-        '[usage] flush skipped: userId="$_userId" pending=$_pendingSeconds',
+        '[usage] flush skipped: userId="$userId" pending=$_pendingSeconds',
       );
       return;
     }
     final amount = _pendingSeconds;
     _pendingSeconds = 0;
-    debugPrint('[usage] flushing $amount seconds for $_userId…');
+    debugPrint('[usage] flushing $amount seconds for $userId…');
     final remaining =
-        await ProfileApi.consumeCredits(userId: _userId, seconds: amount);
+        await ProfileApi.consumeCredits(userId: userId, seconds: amount);
     debugPrint('[usage] flush returned remaining=$remaining');
-    if (remaining != null) {
+    // Only push the authoritative remaining into the notifiers when the
+    // tracker hasn't been re-bound to a different user mid-flight.
+    if (remaining != null && _userId == userId) {
       creditsRemaining.value = remaining;
       if (remaining == 0 && !creditsExhausted.value) {
         creditsExhausted.value = true;
@@ -122,13 +127,39 @@ abstract final class UsageTracker {
 
   /// Stop the periodic timer and flush any partial seconds so we don't
   /// lose what was already used since the last tick.
+  ///
+  /// Clears `_userId` BEFORE the await so a concurrent `start()` —
+  /// which fires-and-forgets `stop()` to discard previous state — can't
+  /// have its newly-assigned `_userId` clobbered by this method's
+  /// post-flush cleanup. The race was real: every tick was firing with
+  /// `_userId=""` because start() ran `_userId = uid` and then stop()
+  /// resumed past its `await _flush()` and reset it back to `''`.
   static Future<void> stop({int extraSeconds = 0}) async {
     if (_kDisabled) return;
     _timer?.cancel();
     _timer = null;
     _pendingSeconds += extraSeconds;
-    await _flush();
+    // Snapshot + clear synchronously.
+    final flushUserId = _userId;
+    final flushAmount = _pendingSeconds;
     _userId = '';
+    _pendingSeconds = 0;
+    if (flushUserId.isEmpty || flushAmount <= 0) return;
+    debugPrint(
+      '[usage] stop flushing $flushAmount seconds for $flushUserId…',
+    );
+    final remaining = await ProfileApi.consumeCredits(
+      userId: flushUserId,
+      seconds: flushAmount,
+    );
+    debugPrint('[usage] stop flush returned remaining=$remaining');
+    // Only touch notifiers if no new user has started since.
+    if (_userId.isEmpty && remaining != null) {
+      creditsRemaining.value = remaining;
+      if (remaining == 0 && !creditsExhausted.value) {
+        creditsExhausted.value = true;
+      }
+    }
   }
 
   /// Wipe local state (e.g. on sign-out). Does NOT flush — caller should
