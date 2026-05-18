@@ -76,6 +76,10 @@ class AudioController extends ChangeNotifier {
     _refreshRouteFromDevices();
 
     _deviceSub = Hardware.instance.onDeviceChange.stream.listen((_) {
+      // Re-apply the speaker pref through `_applySpeaker` so that a
+      // headset plugged in mid-call instantly takes over from the
+      // loudspeaker (and unplugging falls back to the user's pref).
+      unawaited(_applySpeaker(_prefs.speakerOn));
       _refreshRouteFromDevices();
     });
     _micTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
@@ -179,12 +183,46 @@ class AudioController extends ChangeNotifier {
     }
   }
 
-  Future<void> _applySpeaker(bool on) async {
+  /// Apply the wanted speakerphone state, but **never** override the
+  /// OS when a wired headset or Bluetooth headset is currently plugged
+  /// in — users plug in headphones to use them, period. YouTube /
+  /// FaceTime / WhatsApp all behave this way; calling
+  /// setSpeakerphoneOn(true) here would silently route the audio out
+  /// the loudspeaker even with AirPods in.
+  Future<void> _applySpeaker(bool wantedSpeaker) async {
     try {
-      await Hardware.instance.setSpeakerphoneOn(on);
+      final hasHeadset = await _hasHeadsetConnected();
+      // If a headset is connected, force speaker off so the OS routes
+      // to the headset. Otherwise honour the user's preference.
+      final effective = hasHeadset ? false : wantedSpeaker;
+      await Hardware.instance.setSpeakerphoneOn(effective);
     } catch (e) {
       debugPrint('AudioController: setSpeakerphoneOn failed: $e');
     }
+  }
+
+  Future<bool> _hasHeadsetConnected() async {
+    try {
+      final outs = await Hardware.instance.audioOutputs();
+      for (final d in outs) {
+        final l = d.label.toLowerCase();
+        if (l.contains('bluetooth') ||
+            l.contains('bt ') ||
+            l.contains('airpods') ||
+            l.contains('a2dp') ||
+            l.contains('hands-free') ||
+            l.contains('headset') ||
+            l.contains('headphone') ||
+            l.contains('earphone') ||
+            l.contains('wired')) {
+          return true;
+        }
+      }
+    } catch (_) {
+      // audioOutputs() not supported (older Android, web). Fall back
+      // to "no headset known" so the user's pref still applies.
+    }
+    return false;
   }
 
   /// Best-effort: scan the output device list (when the platform
