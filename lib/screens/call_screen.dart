@@ -984,16 +984,29 @@ class _CameraOffTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = compact ? 14.0 : 28.0;
+    final fontSize = compact ? 13.0 : 24.0;
+    final iconSize = compact ? 28.0 : 56.0;
+    final hasLabel = label != null && label!.isNotEmpty;
     return Container(
-      color: Colors.black,
+      color: const Color(0xFF111111),
       alignment: Alignment.center,
-      child: (label == null || label!.isEmpty)
-          ? null
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.videocam_off_rounded,
+            size: iconSize,
+            color: Colors.white.withValues(alpha: 0.35),
+          ),
+          if (hasLabel) ...[
+            SizedBox(height: compact ? 6 : 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
                 label!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -1002,6 +1015,9 @@ class _CameraOffTile extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ],
+      ),
     );
   }
 }

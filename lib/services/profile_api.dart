@@ -4,15 +4,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 
 /// What we actually grant the free tier on each weekly refill, in
-/// seconds of translated call. Temporarily set to 3 min for pre-launch
-/// testing so the cutoff-when-exhausted path can be observed end-to-end
-/// without burning a real 2h block. Bump back to
-/// [freeWeeklyAdvertisedSeconds] before going live.
-const int freeWeeklyCreditsSeconds = 3 * 60; // TEST: 3 min
+/// seconds of translated call. Production value: 2 h, matching what
+/// the UI advertises. (Earlier this was 3 min for testing the
+/// cutoff-when-exhausted path — confirmed working, restored.)
+const int freeWeeklyCreditsSeconds = 2 * 60 * 60; // 2 h / week
 
-/// The free-tier weekly quota we advertise in the UI. Decoupled from
-/// [freeWeeklyCreditsSeconds] so testing-time caps don't leak into
-/// the marketing copy users see.
+/// The free-tier weekly quota we advertise in the UI. Kept as a
+/// separate name so we can shrink the real cap during future testing
+/// runs without leaking "3 min" into screenshots / store listings.
 const int freeWeeklyAdvertisedSeconds = 2 * 60 * 60; // 2 h / week
 
 /// Default weekly allotment for the Premium tier.
