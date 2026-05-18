@@ -63,13 +63,23 @@ abstract final class UsageTracker {
       creditsExhausted.value = false;
       return;
     }
-    if (userId.isEmpty) return;
-    if (_timer != null && _userId == userId) return;
+    if (userId.isEmpty) {
+      debugPrint('[usage] start aborted: empty userId');
+      return;
+    }
+    if (_timer != null && _userId == userId) {
+      debugPrint('[usage] start no-op: timer already running for $userId');
+      return;
+    }
     stop(); // cancel previous if any
     _userId = userId;
     _pendingSeconds = 0;
     creditsRemaining.value = initialCredits;
     creditsExhausted.value = initialCredits <= 0;
+    debugPrint(
+      '[usage] started → userId=$userId initialCredits=$initialCredits '
+      'tickEvery=${_tickSeconds}s',
+    );
     _timer = Timer.periodic(
       const Duration(seconds: _tickSeconds),
       (_) => _onTick(),
@@ -78,10 +88,11 @@ abstract final class UsageTracker {
 
   static void _onTick() {
     _pendingSeconds += _tickSeconds;
-    // Optimistic local decrement so the UI feels live; the authoritative
-    // value comes back from `consumeCredits` and overwrites this.
     final localNext = (creditsRemaining.value - _tickSeconds).clamp(0, 1 << 31);
     creditsRemaining.value = localNext;
+    debugPrint(
+      '[usage] tick → pending=${_pendingSeconds}s localRemaining=$localNext',
+    );
     if (localNext == 0 && !creditsExhausted.value) {
       creditsExhausted.value = true;
     }
@@ -89,11 +100,18 @@ abstract final class UsageTracker {
   }
 
   static Future<void> _flush() async {
-    if (_userId.isEmpty || _pendingSeconds <= 0) return;
+    if (_userId.isEmpty || _pendingSeconds <= 0) {
+      debugPrint(
+        '[usage] flush skipped: userId="$_userId" pending=$_pendingSeconds',
+      );
+      return;
+    }
     final amount = _pendingSeconds;
     _pendingSeconds = 0;
+    debugPrint('[usage] flushing $amount seconds for $_userId…');
     final remaining =
         await ProfileApi.consumeCredits(userId: _userId, seconds: amount);
+    debugPrint('[usage] flush returned remaining=$remaining');
     if (remaining != null) {
       creditsRemaining.value = remaining;
       if (remaining == 0 && !creditsExhausted.value) {
