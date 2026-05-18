@@ -17,9 +17,13 @@ import 'profile_screen.dart';
 /// followers, a "S'abonner" button appears for anyone the user does not
 /// already follow back, so the relation can be made mutual in one tap.
 class FriendsListScreen extends StatefulWidget {
-  const FriendsListScreen({super.key, required this.direction});
+  const FriendsListScreen({super.key, required this.direction, this.userId});
 
   final FriendDirection direction;
+
+  /// When non-null, list the followers/following of this peer instead of
+  /// the current device's. Used by the "view someone's profile" flow.
+  final String? userId;
 
   @override
   State<FriendsListScreen> createState() => _FriendsListScreenState();
@@ -60,8 +64,12 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
     }
     try {
       final id = await DeviceId.getOrCreate();
+      // When viewing another user's profile, list THEIR peers — not mine.
+      // Keep `id` (= my device id) around so the follow-back trailing button
+      // can compare against my own following set.
+      final targetId = widget.userId ?? id;
       final peers = await FriendshipApi.fetchAcceptedPeers(
-        meId: id,
+        meId: targetId,
         direction: widget.direction,
       );
       final mine = await FriendshipApi.fetchMine(id);
