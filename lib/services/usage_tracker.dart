@@ -49,6 +49,39 @@ abstract final class UsageTracker {
 
   static bool get isRunning => _timer != null;
 
+  /// True between an explicit `pause()` and the next `resume()`. While
+  /// paused the periodic timer is cancelled — no ticks, no flush — so
+  /// no credits are spent. State (userId, pendingSeconds, remaining)
+  /// is preserved so a `resume()` picks up exactly where we left off.
+  static bool _paused = false;
+
+  /// Pause the timer without losing accumulated state. Used by the
+  /// CallScreen when the OpenAI pipeline detaches (peer left, VAD
+  /// silenced, credits hit 0) — we shouldn't keep billing call time
+  /// when nothing's being translated.
+  static void pause() {
+    if (_kDisabled) return;
+    if (_paused) return;
+    if (_timer == null) return; // nothing to pause
+    _timer?.cancel();
+    _timer = null;
+    _paused = true;
+    debugPrint('[usage] paused (pending=$_pendingSeconds, userId=$_userId)');
+  }
+
+  /// Resume ticking after a `pause()`. No-op if not currently paused.
+  static void resume() {
+    if (_kDisabled) return;
+    if (!_paused) return;
+    if (_userId.isEmpty) return;
+    _paused = false;
+    debugPrint('[usage] resumed for $_userId');
+    _timer = Timer.periodic(
+      const Duration(seconds: _tickSeconds),
+      (_) => _onTick(),
+    );
+  }
+
   /// Start tracking for [userId] with the known starting credit balance.
   /// Safe to call repeatedly — restarts the timer if the user changed,
   /// no-ops if already running for the same user.

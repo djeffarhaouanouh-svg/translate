@@ -62,6 +62,12 @@ class _CallScreenState extends State<CallScreen> {
 
   late final AudioController _audio = AudioController(translation: widget.translation);
   bool _lastRemoteHot = false;
+  /// Set to true the first time any RemoteParticipant joins the room.
+  /// Used by the ParticipantDisconnectedEvent handler to distinguish
+  /// "caller waiting alone before pickup" (empty + !_hadRemote → keep
+  /// the room open) from "peer just left a 1:1 call" (empty +
+  /// _hadRemote → auto-hangup so we don't burn credits on a ghost room).
+  bool _hadRemote = false;
 
   void _onTranslationStateChanged() {
     final hot = widget.translation.translationRemoteVoiceHot;
@@ -215,12 +221,20 @@ class _CallScreenState extends State<CallScreen> {
           // First remote joining = call answered → silence the caller's
           // dial tone (no-op on native via the stub).
           CallAlert.stop();
+          _hadRemote = true;
           unawaited(_refreshTranslationBinding(room));
           if (mounted) setState(() {});
         })
         ..on<ParticipantDisconnectedEvent>((_) {
           unawaited(_refreshTranslationBinding(room));
           if (mounted) setState(() {});
+          // 1:1 calls only — if we had a peer and they just left,
+          // there's no reason to keep the room (or our credit meter)
+          // running. Auto-hangup so the caller doesn't burn minutes
+          // sitting alone in an empty room.
+          if (_hadRemote && room.remoteParticipants.isEmpty && mounted) {
+            unawaited(_hangUp());
+          }
         })
         ..on<ParticipantMetadataUpdatedEvent>((_) {
           unawaited(_refreshTranslationBinding(room));
