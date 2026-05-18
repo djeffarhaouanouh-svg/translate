@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_strings.dart';
 import '../services/block_api.dart';
@@ -12,6 +13,7 @@ import '../services/friendship_api.dart';
 import '../services/languages.dart';
 import '../services/like_api.dart';
 import '../services/profile_api.dart';
+import '../services/stripe_api.dart';
 import '../services/supabase_service.dart';
 import '../services/user_prefs.dart';
 import '../services/web_poll.dart';
@@ -830,6 +832,16 @@ class _CreditsCard extends StatelessWidget {
               ),
             ),
           ],
+          // Pro users on web get the Stripe Customer Portal link
+          // (cancel, change card, swap tier). Native users go through
+          // App Store / Play Store subscription management instead.
+          if (isPro && kIsWeb) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: const _ManageSubscriptionButton(),
+            ),
+          ],
         ],
       ),
     );
@@ -1000,29 +1012,7 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 8),
-          FilledButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Paiement bientôt disponible — abonnement $name',
-                  ),
-                ),
-              );
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: WhatsAppCallTheme.accent,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(44),
-            ),
-            child: Text(
-              'Souscrire $name',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+          _SubscribeButton(tier: name.toLowerCase(), label: 'Souscrire $name'),
         ],
       ),
     );
@@ -1073,6 +1063,126 @@ class _PlanCard extends StatelessWidget {
 /// Avoids embedding pricing in the app, which keeps the build
 /// store-compatible (Apple §3.1.1: no in-app pointers to external
 /// purchase mechanisms with full pricing).
+/// Stateful subscribe button so we can show a spinner while the
+/// `/api/stripe/checkout` round-trip is in flight. Once we have the
+/// URL we redirect the browser to Stripe Checkout (web-only).
+class _SubscribeButton extends StatefulWidget {
+  const _SubscribeButton({required this.tier, required this.label});
+
+  final String tier;
+  final String label;
+
+  @override
+  State<_SubscribeButton> createState() => _SubscribeButtonState();
+}
+
+class _SubscribeButtonState extends State<_SubscribeButton> {
+  bool _busy = false;
+
+  Future<void> _onTap() async {
+    setState(() => _busy = true);
+    final url = await StripeApi.startCheckout(widget.tier);
+    if (!mounted) return;
+    if (url == null || url.isEmpty) {
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Impossible d'ouvrir la page de paiement. Réessaye dans un instant.",
+          ),
+        ),
+      );
+      return;
+    }
+    // Redirect in the same tab on web (Stripe expects an external
+    // page), open the system browser on native (won't normally fire
+    // since the plans are web-only, but kept defensive).
+    await launchUrl(
+      Uri.parse(url),
+      webOnlyWindowName: '_self',
+      mode: LaunchMode.externalApplication,
+    );
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: _busy ? null : _onTap,
+      style: FilledButton.styleFrom(
+        backgroundColor: WhatsAppCallTheme.accent,
+        foregroundColor: Colors.white,
+        minimumSize: const Size.fromHeight(44),
+      ),
+      child: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Text(
+              widget.label,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+    );
+  }
+}
+
+/// Opens the Stripe Customer Portal. Shown on the credits card when
+/// the user is already Pro / Ultra so they can cancel / change card /
+/// upgrade / downgrade. Web-only — native builds keep the existing
+/// [_ManageOnWebCard] pointer.
+class _ManageSubscriptionButton extends StatefulWidget {
+  const _ManageSubscriptionButton();
+
+  @override
+  State<_ManageSubscriptionButton> createState() =>
+      _ManageSubscriptionButtonState();
+}
+
+class _ManageSubscriptionButtonState extends State<_ManageSubscriptionButton> {
+  bool _busy = false;
+
+  Future<void> _onTap() async {
+    setState(() => _busy = true);
+    final url = await StripeApi.openPortal();
+    if (!mounted) return;
+    if (url == null || url.isEmpty) {
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Impossible d'ouvrir le portail abonnement."),
+        ),
+      );
+      return;
+    }
+    await launchUrl(
+      Uri.parse(url),
+      webOnlyWindowName: '_self',
+      mode: LaunchMode.externalApplication,
+    );
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: _busy ? null : _onTap,
+      icon: _busy
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.settings_outlined, size: 18),
+      label: const Text('Gérer mon abonnement'),
+    );
+  }
+}
+
 class _ManageOnWebCard extends StatelessWidget {
   const _ManageOnWebCard({required this.url});
 

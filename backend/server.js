@@ -9,6 +9,13 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { AccessToken } = require('livekit-server-sdk');
 const { notifyUser } = require('./notify');
+const {
+  authUserId: stripeAuthUserId,
+  createCheckoutSession,
+  createPortalSession,
+  verifyWebhook,
+  handleEvent: handleStripeEvent,
+} = require('./stripe');
 
 dotenv.config();
 
@@ -143,6 +150,34 @@ app.post(
       // eslint-disable-next-line no-console
       console.error('translation calls proxy', e);
       return res.status(502).json({ error: 'openai_unreachable' });
+    }
+  },
+);
+
+// Stripe webhook — needs the raw body buffer to verify the signature.
+// MUST run before `express.json` below, otherwise the body gets parsed
+// to a JS object and the HMAC over the original bytes fails.
+app.post(
+  '/api/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+    try {
+      event = verifyWebhook(req.body, sig);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[stripe webhook] signature failed:', e.message);
+      return res.status(400).send(`Webhook Error: ${e.message}`);
+    }
+    try {
+      await handleStripeEvent(event);
+      return res.json({ received: true });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[stripe webhook] handler failed:', e);
+      // Return 500 so Stripe retries.
+      return res.status(500).json({ error: 'handler_failed' });
     }
   },
 );
@@ -366,6 +401,40 @@ app.post('/translation/text', async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('translation text', e);
     return res.status(502).json({ error: 'openai_unreachable' });
+  }
+});
+
+// Stripe Checkout — body: { tier: 'pro' | 'ultra' }. Authorization
+// must carry the caller's Supabase JWT; the user_id is read from
+// the verified token, never from the request body.
+app.post('/api/stripe/checkout', async (req, res) => {
+  const uid = await stripeAuthUserId(req);
+  if (!uid) return res.status(401).json({ error: 'unauthenticated' });
+  const tier = req.body?.tier;
+  if (tier !== 'pro' && tier !== 'ultra') {
+    return res.status(400).json({ error: 'invalid_tier' });
+  }
+  try {
+    const url = await createCheckoutSession(uid, tier);
+    return res.json({ url });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[stripe checkout] error:', e?.message || e);
+    return res.status(500).json({ error: e?.message || 'checkout_failed' });
+  }
+});
+
+// Stripe Customer Portal — same auth as checkout.
+app.post('/api/stripe/portal', async (req, res) => {
+  const uid = await stripeAuthUserId(req);
+  if (!uid) return res.status(401).json({ error: 'unauthenticated' });
+  try {
+    const url = await createPortalSession(uid);
+    return res.json({ url });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[stripe portal] error:', e?.message || e);
+    return res.status(500).json({ error: e?.message || 'portal_failed' });
   }
 });
 
