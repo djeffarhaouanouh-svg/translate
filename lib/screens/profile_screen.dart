@@ -870,7 +870,8 @@ class _PlansSection extends StatelessWidget {
               'priorité serveur',
               'meilleure qualité audio',
             ],
-            highlighted: false,
+            featured: true,
+            popularBadge: true,
           ),
           SizedBox(height: 12),
           _PlanCard(
@@ -884,7 +885,8 @@ class _PlansSection extends StatelessWidget {
               'voix premium',
               'future voice clone améliorée',
             ],
-            highlighted: true,
+            featured: false,
+            popularBadge: false,
           ),
         ],
       );
@@ -900,7 +902,8 @@ class _PlanCard extends StatelessWidget {
     required this.price,
     required this.audience,
     required this.features,
-    required this.highlighted,
+    required this.featured,
+    required this.popularBadge,
   });
 
   final String name;
@@ -908,20 +911,26 @@ class _PlanCard extends StatelessWidget {
   final String audience;
   final List<String> features;
 
-  /// Visually flagged tier (Ultra). Same shape as the regular card but
-  /// with an accent-coloured border to draw the eye.
-  final bool highlighted;
+  /// Visually flagged tier — accent-coloured border + accent price /
+  /// bullets / CTA to draw the eye toward this option.
+  final bool featured;
+
+  /// Render a "Populaire" badge in the top-right corner. Independent
+  /// of [featured] in the API so a tier can be visually featured
+  /// without claiming popularity (or vice versa), but in practice
+  /// they're flipped together.
+  final bool popularBadge;
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = highlighted
+    final borderColor = featured
         ? WhatsAppCallTheme.accent
         : const Color(0xFF2A3942);
-    return Container(
+    final card = Container(
       decoration: BoxDecoration(
         color: WhatsAppCallTheme.bar,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: highlighted ? 1.5 : 1),
+        border: Border.all(color: borderColor, width: featured ? 1.5 : 1),
       ),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: Column(
@@ -941,7 +950,7 @@ class _PlanCard extends StatelessWidget {
               Text(
                 price,
                 style: TextStyle(
-                  color: highlighted
+                  color: featured
                       ? WhatsAppCallTheme.accent
                       : WhatsAppCallTheme.strongText,
                   fontSize: 16,
@@ -971,7 +980,7 @@ class _PlanCard extends StatelessWidget {
                     child: Icon(
                       Icons.check_circle,
                       size: 16,
-                      color: highlighted
+                      color: featured
                           ? WhatsAppCallTheme.accent
                           : WhatsAppCallTheme.subtleText,
                     ),
@@ -993,8 +1002,6 @@ class _PlanCard extends StatelessWidget {
           const SizedBox(height: 8),
           FilledButton(
             onPressed: () {
-              // Web payment flow stub. Hook real Stripe / Paddle /
-              // similar checkout here.
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
@@ -1004,7 +1011,7 @@ class _PlanCard extends StatelessWidget {
               );
             },
             style: FilledButton.styleFrom(
-              backgroundColor: highlighted
+              backgroundColor: featured
                   ? WhatsAppCallTheme.accent
                   : WhatsAppCallTheme.bubbleIncoming,
               foregroundColor: Colors.white,
@@ -1020,6 +1027,45 @@ class _PlanCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    if (!popularBadge) return card;
+
+    // Overlay a "Populaire" badge in the top-right corner. The card
+    // gets a little extra top padding so the title row never collides
+    // with the badge ribbon.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        card,
+        Positioned(
+          top: -10,
+          right: 14,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: WhatsAppCallTheme.accent,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: WhatsAppCallTheme.accent.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Text(
+              'Populaire',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
