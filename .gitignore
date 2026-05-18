@@ -52,6 +52,12 @@ android/*.jks
 **/key.properties
 **/*.jks
 
+# Local emulator runner — may carry the publishable Supabase key
+# pre-filled. Publishable keys are technically safe to share, but
+# keeping this file local avoids re-committing it every time someone
+# tweaks the run config.
+run-emulator.ps1
+
 # Symbolication related
 app.*.symbols
 
