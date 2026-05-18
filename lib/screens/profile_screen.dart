@@ -1011,9 +1011,7 @@ class _PlanCard extends StatelessWidget {
               );
             },
             style: FilledButton.styleFrom(
-              backgroundColor: featured
-                  ? WhatsAppCallTheme.accent
-                  : WhatsAppCallTheme.bubbleIncoming,
+              backgroundColor: WhatsAppCallTheme.accent,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(44),
             ),
