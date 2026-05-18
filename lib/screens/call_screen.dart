@@ -127,7 +127,11 @@ class _CallScreenState extends State<CallScreen> {
           sourceBcp47: widget.mySourceLang,
           targetBcp47: remoteLang,
         );
-        await widget.translation.attachToRoom(room, route: route);
+        await widget.translation.attachToRoom(
+          room,
+          route: route,
+          roomName: widget.roomName,
+        );
       } while (_refreshPending && mounted);
     } finally {
       _refreshingTranslation = false;

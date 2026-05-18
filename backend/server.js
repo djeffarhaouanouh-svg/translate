@@ -10,6 +10,11 @@ const dotenv = require('dotenv');
 const { AccessToken } = require('livekit-server-sdk');
 const { notifyUser } = require('./notify');
 const {
+  ensureTranslationAgent,
+  stopTranslationAgent,
+  BOT_IDENTITY_PREFIX,
+} = require('./translation_agent');
+const {
   authUserId: stripeAuthUserId,
   createCheckoutSession,
   createPortalSession,
@@ -59,6 +64,21 @@ const OPENAI_TRANSLATION_VAD_SILENCE_MS = (() => {
  */
 const OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE =
   process.env.OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE?.trim() === '1';
+
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY?.trim();
+const MISTRAL_TEXT_TRANSLATION_MODEL =
+  process.env.MISTRAL_TEXT_TRANSLATION_MODEL?.trim() || 'mistral-small-latest';
+const MISTRAL_REALTIME_STT_MODEL =
+  process.env.MISTRAL_REALTIME_STT_MODEL?.trim() ||
+  'voxtral-mini-transcribe-realtime-2602';
+const MISTRAL_TTS_MODEL =
+  process.env.MISTRAL_TTS_MODEL?.trim() || 'voxtral-mini-tts-2603';
+const MISTRAL_TTS_VOICE_ID = process.env.MISTRAL_TTS_VOICE_ID?.trim() || '';
+const MISTRAL_CHAT_COMPLETIONS_URL = 'https://api.mistral.ai/v1/chat/completions';
+
+const TRANSLATION_PROVIDER =
+  process.env.TRANSLATION_PROVIDER?.trim().toLowerCase() || 'openai';
+
 const PORT = Number(process.env.PORT || 8787);
 
 const OPENAI_TRANSLATION_CLIENT_SECRETS =
@@ -89,6 +109,12 @@ function assertEnv() {
 function assertOpenAI() {
   if (!OPENAI_API_KEY) {
     throw new Error('Missing OPENAI_API_KEY');
+  }
+}
+
+function assertMistral() {
+  if (!MISTRAL_API_KEY) {
+    throw new Error('Missing MISTRAL_API_KEY');
   }
 }
 
@@ -341,15 +367,16 @@ app.post('/translation/realtime/session', async (req, res) => {
  * POST /translation/text
  * Body: { text: "...", from?: "fr", to: "en" } (BCP-47 primary subtag)
  * Returns: { translated: "..." }
- * Cheap one-shot text translation via gpt-4.1-mini Chat Completions. Used
- * by the in-app "auto-translate messages" toggle to render each foreign
+ * Cheap one-shot text translation via Mistral Chat Completions
+ * (mistral-small-latest by default; override with MISTRAL_TEXT_TRANSLATION_MODEL).
+ * Used by the in-app "auto-translate messages" toggle to render each foreign
  * message in the reader's language.
  */
 app.post('/translation/text', async (req, res) => {
   try {
-    assertOpenAI();
+    assertMistral();
   } catch (e) {
-    return res.status(500).json({ error: 'openai_misconfigured' });
+    return res.status(500).json({ error: 'mistral_misconfigured' });
   }
   const rawText = typeof req.body?.text === 'string' ? req.body.text : '';
   const text = rawText.trim().slice(0, 4000);
@@ -359,7 +386,6 @@ app.post('/translation/text', async (req, res) => {
     return res.status(400).json({ error: 'invalid_input' });
   }
   if (from && from === to) {
-    // Source and target match — no translation needed.
     return res.json({ translated: text });
   }
   try {
@@ -368,14 +394,14 @@ app.post('/translation/text', async (req, res) => {
       `Reply with the translated text ONLY, no quotes, no explanation, ` +
       `no language tags. Preserve emojis and proper nouns. If the message ` +
       `is already in ${to}, return it unchanged.`;
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    const r = await fetch(MISTRAL_CHAT_COMPLETIONS_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${MISTRAL_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: MISTRAL_TEXT_TRANSLATION_MODEL,
         messages: [
           { role: 'system', content: sys },
           { role: 'user', content: text },
@@ -390,17 +416,93 @@ app.post('/translation/text', async (req, res) => {
     } catch (_) {
       return res
         .status(502)
-        .json({ error: 'openai_bad_response', body: body.slice(0, 200) });
+        .json({ error: 'mistral_bad_response', body: body.slice(0, 200) });
     }
     if (!r.ok) {
-      return res.status(r.status).json({ error: 'openai_error', detail: parsed });
+      // eslint-disable-next-line no-console
+      console.error('[xlate-text] Mistral error', r.status, JSON.stringify(parsed).slice(0, 400));
+      return res.status(r.status).json({ error: 'mistral_error', detail: parsed });
     }
     const translated = parsed?.choices?.[0]?.message?.content ?? '';
     return res.json({ translated });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('translation text', e);
-    return res.status(502).json({ error: 'openai_unreachable' });
+    return res.status(502).json({ error: 'mistral_unreachable' });
+  }
+});
+
+/**
+ * GET /translation/provider
+ * Tells the Flutter client which translation backend it should use.
+ * Returns: { provider: 'openai'|'mistral', botIdentityPrefix?: string }
+ */
+app.get('/translation/provider', (_req, res) => {
+  if (TRANSLATION_PROVIDER === 'mistral') {
+    return res.json({
+      provider: 'mistral',
+      botIdentityPrefix: BOT_IDENTITY_PREFIX,
+    });
+  }
+  return res.json({ provider: 'openai' });
+});
+
+/**
+ * POST /translation/agent/ensure
+ * Body: { roomName }
+ * Spawns (idempotently) a Mistral translation bot in the LiveKit room.
+ * Client should call this right after joining the room. The bot reads each
+ * human participant's metadata.sourceLang and publishes per-listener audio
+ * tracks named `xlate-for-<identity>`.
+ */
+app.post('/translation/agent/ensure', async (req, res) => {
+  if (TRANSLATION_PROVIDER !== 'mistral') {
+    return res.status(404).json({ error: 'provider_not_mistral' });
+  }
+  try {
+    assertEnv();
+    assertMistral();
+  } catch (e) {
+    return res.status(500).json({ error: 'server_misconfigured', detail: e.message });
+  }
+  const roomName = sanitizeRoomName(req.body?.roomName);
+  if (!roomName) return res.status(400).json({ error: 'invalid_room' });
+  try {
+    const result = await ensureTranslationAgent({
+      url: LIVEKIT_URL,
+      apiKey: LIVEKIT_API_KEY,
+      apiSecret: LIVEKIT_API_SECRET,
+      roomName,
+      mistralConfig: {
+        apiKey: MISTRAL_API_KEY,
+        sttModel: MISTRAL_REALTIME_STT_MODEL,
+        textModel: MISTRAL_TEXT_TRANSLATION_MODEL,
+        ttsModel: MISTRAL_TTS_MODEL,
+        ttsVoiceId: MISTRAL_TTS_VOICE_ID,
+      },
+    });
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('[xlate-agent-ensure]', e);
+    return res.status(502).json({ error: 'agent_start_failed', detail: e.message });
+  }
+});
+
+/**
+ * POST /translation/agent/stop
+ * Body: { roomName }
+ * Manually tear down the bot. Normally not needed — the bot exits when the
+ * LiveKit room is closed.
+ */
+app.post('/translation/agent/stop', async (req, res) => {
+  const roomName = sanitizeRoomName(req.body?.roomName);
+  if (!roomName) return res.status(400).json({ error: 'invalid_room' });
+  try {
+    const stopped = await stopTranslationAgent({ url: LIVEKIT_URL, roomName });
+    return res.json({ stopped });
+  } catch (e) {
+    console.error('[xlate-agent-stop]', e);
+    return res.status(502).json({ error: 'agent_stop_failed' });
   }
 });
 

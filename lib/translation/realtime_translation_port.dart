@@ -21,9 +21,13 @@ enum TranslationFeedbackPhase {
 /// - Stream microphone audio to your bridge; receive translated audio or text.
 /// - Optionally mix translated audio or publish via a second LiveKit track / data channel.
 abstract class RealtimeTranslationPort {
+  /// [roomName] is the LiveKit room name (same string the client used to mint
+  /// its JWT). Only the Mistral backend-bot implementation needs it (to call
+  /// `/translation/agent/ensure`); the OpenAI WebRTC implementation ignores it.
   Future<void> attachToRoom(
     Room room, {
     required TranslationRoute route,
+    String? roomName,
   });
 
   Future<void> detach();
@@ -44,6 +48,10 @@ abstract class RealtimeTranslationPort {
   /// Set the playback volume of the translated audio in [0, 1]. No-op when
   /// the implementation has no translated audio stream of its own.
   Future<void> setTranslatedAudioVolume(double volume) async {}
+
+  /// Release any resources held by the implementation. Default is no-op so
+  /// the [NoOpRealtimeTranslation] stays a const value.
+  void dispose() {}
 }
 
 /// Default: no processing; keeps call path simple until you add an adapter.
@@ -53,6 +61,7 @@ class NoOpRealtimeTranslation implements RealtimeTranslationPort {
   Future<void> attachToRoom(
     Room room, {
     required TranslationRoute route,
+    String? roomName,
   }) async {}
 
   @override
@@ -72,4 +81,7 @@ class NoOpRealtimeTranslation implements RealtimeTranslationPort {
 
   @override
   Future<void> setTranslatedAudioVolume(double volume) async {}
+
+  @override
+  void dispose() {}
 }

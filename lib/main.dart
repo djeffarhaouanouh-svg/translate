@@ -17,7 +17,8 @@ import 'services/profile_api.dart';
 import 'services/supabase_service.dart';
 import 'services/user_prefs.dart';
 import 'theme/whatsapp_call_theme.dart';
-import 'translation/openai_realtime_translation.dart';
+import 'translation/realtime_translation_factory.dart';
+import 'translation/realtime_translation_port.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,13 +52,23 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   bool _loading = true;
   bool _needsOnboarding = false;
   bool _authed = false;
-  late final OpenAiRealtimeTranslation _translation;
+  RealtimeTranslationPort _translation = const NoOpRealtimeTranslation();
   StreamSubscription<AuthState>? _authSub;
 
   @override
   void initState() {
     super.initState();
-    _translation = OpenAiRealtimeTranslation();
+    // Ask the backend which provider is active (OpenAI WebRTC vs. Mistral
+    // backend bot) and swap in the right adapter. Defaults to OpenAI on any
+    // network error to keep the existing pipeline working.
+    unawaited(() async {
+      final impl = await createRealtimeTranslation();
+      if (!mounted) {
+        impl.dispose();
+        return;
+      }
+      setState(() => _translation = impl);
+    }());
     _bootstrap();
     // React to sign-in / sign-out events anywhere in the app.
     if (isSupabaseReady) {

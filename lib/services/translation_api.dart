@@ -165,8 +165,89 @@ Future<String> postTranslationCallsSdp({
   return res.body;
 }
 
+Uri _backendUri(String path) {
+  const fromEnv = String.fromEnvironment('TOKEN_API_BASE');
+  if (fromEnv.isNotEmpty) {
+    final b = fromEnv.replaceAll(RegExp(r'/$'), '');
+    return Uri.parse('$b$path');
+  }
+  if (kIsWeb) {
+    final o = Uri.base.removeFragment();
+    return Uri(
+      scheme: o.scheme,
+      host: o.host,
+      port: o.hasPort ? o.port : null,
+      path: path,
+    );
+  }
+  final b = resolvedTokenApiBase().replaceAll(RegExp(r'/$'), '');
+  return Uri.parse('$b$path');
+}
+
+class TranslationProviderInfo {
+  TranslationProviderInfo({required this.provider, this.botIdentityPrefix});
+  final String provider;
+  final String? botIdentityPrefix;
+}
+
+/// Queries the backend for its active translation provider (OpenAI WebRTC
+/// realtime vs. Mistral via backend bot). Defaults to OpenAI on any failure
+/// so the existing pipeline keeps working.
+Future<TranslationProviderInfo> fetchTranslationProvider() async {
+  try {
+    final res = await http.get(_backendUri('/translation/provider'));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return TranslationProviderInfo(provider: 'openai');
+    }
+    final j = _decodeObjectMap(res.body);
+    final provider = (j['provider'] is String) ? j['provider'] as String : 'openai';
+    final botPrefix = j['botIdentityPrefix'];
+    return TranslationProviderInfo(
+      provider: provider,
+      botIdentityPrefix: botPrefix is String ? botPrefix : null,
+    );
+  } catch (_) {
+    return TranslationProviderInfo(provider: 'openai');
+  }
+}
+
+class EnsureAgentResult {
+  EnsureAgentResult({required this.identity, this.botIdentityPrefix});
+  final String identity;
+  final String? botIdentityPrefix;
+}
+
+/// Asks the backend to (idempotently) spawn a Mistral translation bot
+/// in the given LiveKit room. Throws on backend errors so the caller
+/// can retry.
+Future<EnsureAgentResult> ensureTranslationAgent({required String roomName}) async {
+  final res = await http.post(
+    _backendUri('/translation/agent/ensure'),
+    headers: const {'Content-Type': 'application/json'},
+    body: jsonEncode({'roomName': roomName}),
+  );
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw TranslationApiException(res.body, statusCode: res.statusCode);
+  }
+  final j = _decodeObjectMap(res.body);
+  final id = j['identity'];
+  return EnsureAgentResult(
+    identity: id is String ? id : '',
+    botIdentityPrefix: 'xlate-bot',
+  );
+}
+
+/// Tells the backend to shut the bot down. Best-effort.
+Future<void> stopTranslationAgent({required String roomName}) async {
+  await http.post(
+    _backendUri('/translation/agent/stop'),
+    headers: const {'Content-Type': 'application/json'},
+    body: jsonEncode({'roomName': roomName}),
+  );
+}
+
 /// One-shot text translation via the backend (`/translation/text` →
-/// OpenAI Chat Completions). Returns the translated string; falls back to
+/// Mistral Chat Completions). Returns the translated string; falls back to
 /// the original [text] on any error so the UI never goes blank.
 Future<String> fetchTextTranslation({
   required String text,

@@ -569,7 +569,11 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   }
 
   @override
-  Future<void> attachToRoom(Room room, {required TranslationRoute route}) async {
+  Future<void> attachToRoom(
+    Room room, {
+    required TranslationRoute route,
+    String? roomName,
+  }) async {
     await detach();
     _room = room;
     _route = route;
