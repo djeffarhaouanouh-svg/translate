@@ -188,6 +188,14 @@ class _CallScreenState extends State<CallScreen> {
     final room = Room();
     try {
       await room.connect(widget.wsUrl, widget.jwt);
+      // For the callee, the caller is already in the room at connect
+      // time → ParticipantConnectedEvent never fires for them and our
+      // `_hadRemote` flag would otherwise stay false, defeating the
+      // "auto-hangup when peer leaves" logic. Seed the flag from the
+      // initial participant snapshot.
+      if (room.remoteParticipants.isNotEmpty) {
+        _hadRemote = true;
+      }
       await room.localParticipant?.setCameraEnabled(true);
       // EC + NS on, AGC OFF. Rationale: the translation pipeline plays
       // a second audio stream on the speakers that the browser's EC
