@@ -880,7 +880,7 @@ class _PlansSection extends StatelessWidget {
             audience:
                 'Pour couples internationaux, gamers, créateurs, appels quotidiens.',
             features: [
-              '~40h/mois',
+              'Appels illimités',
               'meilleure latence',
               'voix premium',
               'future voice clone améliorée',
