@@ -203,7 +203,7 @@ abstract final class AppStrings {
         'Tu pourras te reconnecter avec ton e-mail et ton mot de passe.',
     'cancel': 'Annuler',
 
-    'credits_free_title': 'Compte gratuit',
+    'credits_free_title': 'Compte gratuit · 2h offertes / semaine',
     'credits_pro_title': 'Compte Premium',
     'credits_remaining': 'Crédits restants',
     'credits_used_total': 'Temps total d\'appel',
@@ -428,7 +428,7 @@ abstract final class AppStrings {
         'You can sign back in with your email and password.',
     'cancel': 'Cancel',
 
-    'credits_free_title': 'Free account',
+    'credits_free_title': 'Free plan · 2h/week included',
     'credits_pro_title': 'Premium account',
     'credits_remaining': 'Credits left',
     'credits_used_total': 'Total call time',

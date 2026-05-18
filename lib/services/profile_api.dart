@@ -3,10 +3,24 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_service.dart';
 
-/// Default weekly allotment for the free tier (seconds of translated call).
-const int freeWeeklyCreditsSeconds = 15 * 60; // 15 min
+/// What we actually grant the free tier on each weekly refill, in
+/// seconds of translated call. Temporarily set to 3 min for pre-launch
+/// testing so the cutoff-when-exhausted path can be observed end-to-end
+/// without burning a real 2h block. Bump back to
+/// [freeWeeklyAdvertisedSeconds] before going live.
+const int freeWeeklyCreditsSeconds = 3 * 60; // TEST: 3 min
+
+/// The free-tier weekly quota we advertise in the UI. Decoupled from
+/// [freeWeeklyCreditsSeconds] so testing-time caps don't leak into
+/// the marketing copy users see.
+const int freeWeeklyAdvertisedSeconds = 2 * 60 * 60; // 2 h / week
+
 /// Default weekly allotment for the Premium tier.
-const int proWeeklyCreditsSeconds = 4 * 60 * 60; // 4 h (~3-5h target band)
+const int proWeeklyCreditsSeconds = 5 * 60 * 60; // 5 h / week
+
+/// Refill cadence: every Monday-ish (rolling 7 days from the last
+/// refill, in practice).
+const Duration creditsRefillPeriod = Duration(days: 7);
 
 class RemoteProfile {
   const RemoteProfile({
@@ -325,7 +339,7 @@ abstract final class ProfileApi {
     if (DateTime.now().isBefore(resetAt)) return null;
     final allotment =
         p.isPro ? proWeeklyCreditsSeconds : freeWeeklyCreditsSeconds;
-    final nextReset = DateTime.now().toUtc().add(const Duration(days: 7));
+    final nextReset = DateTime.now().toUtc().add(creditsRefillPeriod);
     try {
       await _c.from('profiles').update({
         'credits_seconds': allotment,
@@ -540,7 +554,7 @@ abstract final class ProfileApi {
   /// it's wired so the UI can demo the upgrade flow.
   static Future<void> activatePremiumWeek(String userId) async {
     if (!isSupabaseReady || userId.isEmpty) return;
-    final until = DateTime.now().toUtc().add(const Duration(days: 7));
+    final until = DateTime.now().toUtc().add(creditsRefillPeriod);
     await _c.from('profiles').update({
       'is_pro': true,
       'pro_expires_at': until.toIso8601String(),
