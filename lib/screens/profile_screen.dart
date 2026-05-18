@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:image_picker/image_picker.dart';
 
 import '../services/app_strings.dart';
@@ -692,10 +694,14 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     const SizedBox(height: 16),
                     _CreditsCard(
                       profile: _remote,
-                      onUpgrade: _remote != null && !_remote!.isPro
+                      onUpgrade: _remote != null &&
+                              !_remote!.isPro &&
+                              !kIsWeb
                           ? _upgradeToPremium
                           : null,
                     ),
+                    const SizedBox(height: 16),
+                    _PlansSection(isPro: _remote?.isPro ?? false),
                   ],
                 ],
               ),
@@ -825,6 +831,274 @@ class _CreditsCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Plans section rendered below the credits card on the user's own
+/// profile. Two presentations depending on the build target:
+///   - Web: in-app pricing cards (Pro 29€ / Ultra 59€) since the web
+///     subscription flow is fully ours.
+///   - Native (iOS / Android): a single "manage your subscription on
+///     our website" card with a copyable URL. Stores enforce in-app
+///     purchases for any subscription that unlocks app features, so
+///     we deliberately don't surface pricing in the app shell — users
+///     bounce to swayco.fr to subscribe.
+class _PlansSection extends StatelessWidget {
+  const _PlansSection({required this.isPro});
+
+  final bool isPro;
+
+  static const String _manageUrl = 'swayco.fr';
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      if (isPro) {
+        // Already on the top tier — nothing more to upsell.
+        return const SizedBox.shrink();
+      }
+      return Column(
+        children: const [
+          _PlanCard(
+            name: 'Pro',
+            price: '29€/mois',
+            audience: 'Pour voyageurs, dating, usage casual intensif.',
+            features: [
+              '~15h/mois',
+              'priorité serveur',
+              'meilleure qualité audio',
+            ],
+            highlighted: false,
+          ),
+          SizedBox(height: 12),
+          _PlanCard(
+            name: 'Ultra',
+            price: '59€/mois',
+            audience:
+                'Pour couples internationaux, gamers, créateurs, appels quotidiens.',
+            features: [
+              '~40h/mois',
+              'meilleure latence',
+              'voix premium',
+              'future voice clone améliorée',
+            ],
+            highlighted: true,
+          ),
+        ],
+      );
+    }
+    // Native — direct users to the web flow.
+    return _ManageOnWebCard(url: _manageUrl);
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.name,
+    required this.price,
+    required this.audience,
+    required this.features,
+    required this.highlighted,
+  });
+
+  final String name;
+  final String price;
+  final String audience;
+  final List<String> features;
+
+  /// Visually flagged tier (Ultra). Same shape as the regular card but
+  /// with an accent-coloured border to draw the eye.
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = highlighted
+        ? WhatsAppCallTheme.accent
+        : const Color(0xFF2A3942);
+    return Container(
+      decoration: BoxDecoration(
+        color: WhatsAppCallTheme.bar,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: highlighted ? 1.5 : 1),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  color: WhatsAppCallTheme.strongText,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                price,
+                style: TextStyle(
+                  color: highlighted
+                      ? WhatsAppCallTheme.accent
+                      : WhatsAppCallTheme.strongText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            audience,
+            style: const TextStyle(
+              color: WhatsAppCallTheme.subtleText,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (final f in features)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: highlighted
+                          ? WhatsAppCallTheme.accent
+                          : WhatsAppCallTheme.subtleText,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      f,
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.strongText,
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () {
+              // Web payment flow stub. Hook real Stripe / Paddle /
+              // similar checkout here.
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Paiement bientôt disponible — abonnement $name',
+                  ),
+                ),
+              );
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: highlighted
+                  ? WhatsAppCallTheme.accent
+                  : WhatsAppCallTheme.bubbleIncoming,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(44),
+            ),
+            child: Text(
+              'Souscrire $name',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tiny card shown on native builds: tells the user the subscription
+/// is managed on the web and provides a one-tap copy of the URL.
+/// Avoids embedding pricing in the app, which keeps the build
+/// store-compatible (Apple §3.1.1: no in-app pointers to external
+/// purchase mechanisms with full pricing).
+class _ManageOnWebCard extends StatelessWidget {
+  const _ManageOnWebCard({required this.url});
+
+  final String url;
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Lien copié : $url'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: WhatsAppCallTheme.bar,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _copy(context),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF2A3942)),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Gère ton abonnement sur notre site web :',
+                      style: TextStyle(
+                        color: WhatsAppCallTheme.strongText,
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      url,
+                      style: const TextStyle(
+                        color: WhatsAppCallTheme.accent,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Copier',
+                icon: const Icon(
+                  Icons.copy_rounded,
+                  color: WhatsAppCallTheme.subtleText,
+                  size: 20,
+                ),
+                onPressed: () => _copy(context),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
