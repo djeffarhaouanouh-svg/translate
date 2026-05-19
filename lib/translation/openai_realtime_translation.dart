@@ -33,6 +33,11 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   RTCPeerConnection? _pc;
   RTCVideoRenderer? _renderer;
   MediaStream? _localStream;
+  /// The actual audio MediaStreamTrack arriving from OpenAI. Stored so we
+  /// can change its volume via Helper.setVolume() — RTCVideoRenderer's
+  /// setVolume is unreliable on Safari/iOS when the renderer view is
+  /// hidden/off-screen, but Helper.setVolume targets the track directly.
+  MediaStreamTrack? _translatedAudioTrack;
   Timer? _refreshTimer;
   /// Recovers if the one-shot refresh timer was never rescheduled (early returns, races).
   Timer? _watchdogTimer;
@@ -85,12 +90,25 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   Future<void> setTranslatedAudioVolume(double volume) async {
     final clamped = volume.clamp(0.0, 1.0);
     _translatedVolume = clamped;
+    // Drive both paths in parallel: renderer.setVolume helps on desktop /
+    // Android, Helper.setVolume on the audio track itself is what actually
+    // works on iOS Safari (where the hidden RTCVideoView often isn't
+    // mounted and its setVolume is a no-op).
     final r = _renderer;
-    if (r == null) return;
-    try {
-      await r.setVolume(clamped);
-    } catch (e) {
-      debugPrint('OpenAi translation: setVolume on renderer failed: $e');
+    if (r != null) {
+      try {
+        await r.setVolume(clamped);
+      } catch (e) {
+        debugPrint('OpenAi translation: renderer.setVolume failed: $e');
+      }
+    }
+    final t = _translatedAudioTrack;
+    if (t != null) {
+      try {
+        await Helper.setVolume(clamped, t);
+      } catch (e) {
+        debugPrint('OpenAi translation: Helper.setVolume failed: $e');
+      }
     }
   }
 
@@ -453,6 +471,19 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         // Re-apply the user's preferred volume on every new media stream
         // (refresh / reconnect rebuilds the renderer source).
         unawaited(playbackRenderer.setVolume(_translatedVolume));
+        // Capture the audio track so we can drive its volume via
+        // Helper.setVolume(), which actually takes effect on iOS Safari
+        // (the renderer-based path is silently ignored when the hidden
+        // RTCVideoView isn't mounted in the viewport).
+        final audioTracks = event.streams[0].getAudioTracks();
+        if (audioTracks.isNotEmpty) {
+          _translatedAudioTrack = audioTracks.first;
+          unawaited(
+            Helper.setVolume(_translatedVolume, _translatedAudioTrack!)
+                .catchError((e) =>
+                    debugPrint('OpenAi translation: Helper.setVolume failed: $e')),
+          );
+        }
         notifyListeners();
       };
 
