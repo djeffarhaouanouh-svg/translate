@@ -162,7 +162,7 @@ class AudioController extends ChangeNotifier {
   // OpenAI translation, so the listener hears only the original speech and
   // never the translation. Cutting the original to absolute zero while the
   // remote is hot leaves a single active flow and avoids the OS arbitration.
-  static const double _duckedLevel = 0.0;
+  static const double _duckedLevel = 0.2;
   static const Duration _duckReleaseDelay = Duration(milliseconds: 1400);
 
   Future<void> _applyTranslatedVolume(double v) async {
