@@ -27,6 +27,7 @@ class AudioController extends ChangeNotifier {
 
   AudioPrefs _prefs = const AudioPrefs(
     translatedVolume: 1.0,
+    originalVolume: 1.0,
     duckingEnabled: true,
     speakerOn: true,
   );
@@ -41,6 +42,10 @@ class AudioController extends ChangeNotifier {
 
   /// Translated-audio volume in [0, 1]. User-controllable.
   double get translatedVolume => _prefs.translatedVolume;
+
+  /// Original (LiveKit) remote-audio volume in [0, 1]. User-controllable.
+  /// When ducking is engaged this baseline is multiplied by [_duckedLevel].
+  double get originalVolume => _prefs.originalVolume;
 
   /// Whether the original (LiveKit) remote audio is auto-lowered while
   /// the remote person speaks (= while the translation pipeline is
@@ -72,7 +77,7 @@ class AudioController extends ChangeNotifier {
 
     await _applySpeaker(_prefs.speakerOn);
     await _applyTranslatedVolume(_prefs.translatedVolume);
-    await _applyOriginalVolume(1.0);
+    await _applyOriginalVolume(_prefs.originalVolume);
     _refreshRouteFromDevices();
 
     _deviceSub = Hardware.instance.onDeviceChange.stream.listen((_) {
@@ -110,13 +115,24 @@ class AudioController extends ChangeNotifier {
     unawaited(UserPrefs.saveAudio(_prefs));
   }
 
+  Future<void> setOriginalVolume(double v) async {
+    final clamped = v.clamp(0.0, 1.0);
+    if ((clamped - _prefs.originalVolume).abs() < 1e-3) return;
+    _prefs = _prefs.copyWith(originalVolume: clamped);
+    // If ducking is currently engaged, the active level depends on it.
+    final live = _isDucking ? clamped * _duckedLevel : clamped;
+    await _applyOriginalVolume(live);
+    notifyListeners();
+    unawaited(UserPrefs.saveAudio(_prefs));
+  }
+
   Future<void> setDuckingEnabled(bool enabled) async {
     if (enabled == _prefs.duckingEnabled) return;
     _prefs = _prefs.copyWith(duckingEnabled: enabled);
     if (!enabled && _isDucking) {
       _isDucking = false;
       _duckRelease?.cancel();
-      await _applyOriginalVolume(1.0);
+      await _applyOriginalVolume(_prefs.originalVolume);
     }
     notifyListeners();
     unawaited(UserPrefs.saveAudio(_prefs));
@@ -142,7 +158,7 @@ class AudioController extends ChangeNotifier {
       _duckRelease?.cancel();
       if (!_isDucking) {
         _isDucking = true;
-        unawaited(_applyOriginalVolume(_duckedLevel));
+        unawaited(_applyOriginalVolume(_prefs.originalVolume * _duckedLevel));
         notifyListeners();
       }
     } else {
@@ -150,7 +166,7 @@ class AudioController extends ChangeNotifier {
       _duckRelease = Timer(_duckReleaseDelay, () {
         if (!_bound) return;
         _isDucking = false;
-        unawaited(_applyOriginalVolume(1.0));
+        unawaited(_applyOriginalVolume(_prefs.originalVolume));
         notifyListeners();
       });
     }

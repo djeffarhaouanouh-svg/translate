@@ -838,6 +838,17 @@ class _AudioSettingsSheet extends StatelessWidget {
                   activeColor: WhatsAppCallTheme.accent,
                   inactiveColor: Colors.white24,
                 ),
+                const SizedBox(height: 6),
+                const _SheetLabel(
+                  icon: Icons.person_outline_rounded,
+                  text: 'Volume voix originale',
+                ),
+                Slider(
+                  value: controller.originalVolume,
+                  onChanged: (v) => controller.setOriginalVolume(v),
+                  activeColor: WhatsAppCallTheme.accent,
+                  inactiveColor: Colors.white24,
+                ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   value: controller.duckingEnabled,

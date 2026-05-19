@@ -7,6 +7,7 @@ abstract final class UserPrefs {
   static const String keySourceLang = 'profile_source_lang';
   static const String keyTargetLang = 'profile_target_lang';
   static const String keyTranslatedVolume = 'audio_translated_volume';
+  static const String keyOriginalVolume = 'audio_original_volume';
   static const String keyDuckingEnabled = 'audio_ducking_enabled';
   static const String keySpeakerOn = 'audio_speaker_on';
 
@@ -48,6 +49,7 @@ abstract final class UserPrefs {
     final p = await SharedPreferences.getInstance();
     return AudioPrefs(
       translatedVolume: p.getDouble(keyTranslatedVolume) ?? 1.0,
+      originalVolume: p.getDouble(keyOriginalVolume) ?? 1.0,
       duckingEnabled: p.getBool(keyDuckingEnabled) ?? true,
       speakerOn: p.getBool(keySpeakerOn) ?? true,
     );
@@ -56,6 +58,7 @@ abstract final class UserPrefs {
   static Future<void> saveAudio(AudioPrefs prefs) async {
     final p = await SharedPreferences.getInstance();
     await p.setDouble(keyTranslatedVolume, prefs.translatedVolume);
+    await p.setDouble(keyOriginalVolume, prefs.originalVolume);
     await p.setBool(keyDuckingEnabled, prefs.duckingEnabled);
     await p.setBool(keySpeakerOn, prefs.speakerOn);
   }
@@ -64,21 +67,25 @@ abstract final class UserPrefs {
 class AudioPrefs {
   const AudioPrefs({
     required this.translatedVolume,
+    required this.originalVolume,
     required this.duckingEnabled,
     required this.speakerOn,
   });
 
   final double translatedVolume;
+  final double originalVolume;
   final bool duckingEnabled;
   final bool speakerOn;
 
   AudioPrefs copyWith({
     double? translatedVolume,
+    double? originalVolume,
     bool? duckingEnabled,
     bool? speakerOn,
   }) =>
       AudioPrefs(
         translatedVolume: translatedVolume ?? this.translatedVolume,
+        originalVolume: originalVolume ?? this.originalVolume,
         duckingEnabled: duckingEnabled ?? this.duckingEnabled,
         speakerOn: speakerOn ?? this.speakerOn,
       );
