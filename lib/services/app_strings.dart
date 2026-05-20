@@ -159,6 +159,9 @@ abstract final class AppStrings {
         "Va dans l'onglet Recherche pour trouver quelqu'un par son prénom, puis envoie une demande d'ami pour pouvoir discuter avec lui.",
     'chat_no_name': 'Sans nom',
     'chat_tap_to_chat': 'Toucher pour discuter',
+    'invite_friend': 'Inviter un ami',
+    'invite_share_text':
+        'Rejoins-moi sur Swayco 🌍 — appels vidéo avec traduction en temps réel : https://www.swayco.fr',
     'tooltip_more': 'Plus',
     'view_profile': 'Voir profil',
     // Chat thread
@@ -194,6 +197,8 @@ abstract final class AppStrings {
         "Lors de tes appels tu devras parler uniquement {lang} pour que la traduction fonctionne.",
     'profile_edit': 'Modifier',
     'profile_message': 'Message',
+    'follow_back': "S'abonner en retour",
+    'follow_following': 'Abonné(e)',
     'profile_loading': 'Chargement...',
     'profile_anonymous': 'Sans nom',
     'profile_email_private': 'Privé · visible uniquement par toi',
@@ -203,7 +208,7 @@ abstract final class AppStrings {
         'Tu pourras te reconnecter avec ton e-mail et ton mot de passe.',
     'cancel': 'Annuler',
 
-    'credits_free_title': 'Compte gratuit · 2h offertes / semaine',
+    'credits_free_title': 'Compte gratuit · 1h offerte / semaine',
     'credits_pro_title': 'Compte Premium',
     'credits_remaining': 'Crédits restants',
     'credits_used_total': 'Temps total d\'appel',
@@ -388,6 +393,9 @@ abstract final class AppStrings {
         'Go to the Search tab to find someone by their first name, then send a friend request to chat with them.',
     'chat_no_name': 'No name',
     'chat_tap_to_chat': 'Tap to chat',
+    'invite_friend': 'Invite a friend',
+    'invite_share_text':
+        'Join me on Swayco 🌍 — video calls with real-time translation: https://www.swayco.fr',
     'tooltip_more': 'More',
     'view_profile': 'View profile',
     'block_peer_q': 'Block {name}?',
@@ -419,6 +427,8 @@ abstract final class AppStrings {
         'During calls you have to speak only {lang} so the translation works.',
     'profile_edit': 'Edit',
     'profile_message': 'Message',
+    'follow_back': 'Follow back',
+    'follow_following': 'Following',
     'profile_loading': 'Loading...',
     'profile_anonymous': 'No name',
     'profile_email_private': 'Private · only visible to you',
@@ -428,7 +438,7 @@ abstract final class AppStrings {
         'You can sign back in with your email and password.',
     'cancel': 'Cancel',
 
-    'credits_free_title': 'Free plan · 2h/week included',
+    'credits_free_title': 'Free plan · 1h/week included',
     'credits_pro_title': 'Premium account',
     'credits_remaining': 'Credits left',
     'credits_used_total': 'Total call time',

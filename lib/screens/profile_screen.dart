@@ -57,6 +57,10 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   // Viewer-mode only: have I liked the displayed user? Drives the heart
   // overlay on the peer's Discover photo.
   bool _iLikePeer = false;
+  // Viewer-mode only: directional follow state with the displayed user.
+  // `_peerFollowsMe` → they added me; `_iFollowPeer` → I added them.
+  bool _peerFollowsMe = false;
+  bool _iFollowPeer = false;
   Timer? _pollTimer;
 
   bool get _isViewingOther => widget.userId != null;
@@ -122,6 +126,17 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
         iLike = myLikes.contains(targetId);
       } catch (_) {}
     }
+    // Directional follow state — drives the "Follow back" button.
+    var peerFollowsMe = false;
+    var iFollowPeer = false;
+    if (_isViewingOther && isSupabaseReady && deviceId.isNotEmpty) {
+      final rel = await FriendshipApi.directionalWith(
+        meId: deviceId,
+        peerId: targetId,
+      );
+      peerFollowsMe = rel.peerFollowsMe;
+      iFollowPeer = rel.iFollowPeer;
+    }
     if (!mounted) return;
     setState(() {
       _deviceId = deviceId;
@@ -131,6 +146,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       _likesCount = likes;
       _peerBlocked = blocked;
       _iLikePeer = iLike;
+      _peerFollowsMe = peerFollowsMe;
+      _iFollowPeer = iFollowPeer;
       _loading = false;
     });
   }
@@ -212,6 +229,25 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       setState(() => _peerBlocked = !wasBlocked);
     } catch (e) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erreur : $e')));
+    }
+  }
+
+  /// Follow the displayed peer back. Reachable only when they already
+  /// follow me and I haven't followed them yet (see the button gating in
+  /// [_IdentitySection]). Optimistic — roll back if the write fails.
+  Future<void> _followBack() async {
+    if (_targetId.isEmpty || _deviceId.isEmpty) return;
+    setState(() => _iFollowPeer = true);
+    try {
+      await FriendshipApi.sendRequest(meId: _deviceId, peerId: _targetId);
+      if (!mounted) return;
+      // Re-pull so the followers/following counts reflect the new edge.
+      await _reload(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _iFollowPeer = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Erreur : $e')));
     }
@@ -601,6 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                   color: WhatsAppCallTheme.bar,
                   onSelected: (v) {
                     if (v == 'report') _reportPeer();
+                    if (v == 'block') _toggleBlock();
                   },
                   itemBuilder: (ctx) => [
                     PopupMenuItem<String>(
@@ -612,6 +649,24 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                           const SizedBox(width: 10),
                           Text(
                             AppStrings.t('report'),
+                            style: const TextStyle(
+                                color: Color(0xFFE53935)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'block',
+                      child: Row(
+                        children: [
+                          Icon(
+                            _peerBlocked ? Icons.lock_open : Icons.block,
+                            size: 18,
+                            color: const Color(0xFFE53935),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            AppStrings.t(_peerBlocked ? 'unblock' : 'block'),
                             style: const TextStyle(
                                 color: Color(0xFFE53935)),
                           ),
@@ -672,7 +727,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     likesCount: _likesCount,
                     discoverPhotoUrl: _remote?.discoverPhotoUrl ?? '',
                     viewerMode: _isViewingOther,
-                    peerBlocked: _peerBlocked,
+                    peerFollowsMe: _peerFollowsMe,
+                    iFollowPeer: _iFollowPeer,
                     iLikePeer: _iLikePeer,
                     onTapAvatar: _pickAndUploadAvatar,
                     onEditBio: _saveBio,
@@ -683,7 +739,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     onDeleteDiscoverPhoto: _deleteDiscoverPhoto,
                     onEdit: _openEditor,
                     onSettings: _openSettings,
-                    onToggleBlock: _toggleBlock,
+                    onFollowBack: _followBack,
                     onTogglePeerLike: _togglePeerLike,
                     onMessagePeer: _openChatWithPeer,
                   ),
@@ -1394,8 +1450,9 @@ class _IdentitySection extends StatelessWidget {
     required this.onEdit,
     required this.onSettings,
     this.viewerMode = false,
-    this.peerBlocked = false,
-    this.onToggleBlock,
+    this.peerFollowsMe = false,
+    this.iFollowPeer = false,
+    this.onFollowBack,
     this.iLikePeer = false,
     this.onTogglePeerLike,
     this.onMessagePeer,
@@ -1421,10 +1478,15 @@ class _IdentitySection extends StatelessWidget {
   final VoidCallback onSettings;
   /// True when this section is rendering someone else's profile read-only.
   /// Hides the camera badge, the bio edit affordance, the discover-photo
-  /// upload affordance, and swaps Edit/Paramètres for Bloquer.
+  /// upload affordance, and swaps Edit/Paramètres for Message / Follow-back.
   final bool viewerMode;
-  final bool peerBlocked;
-  final VoidCallback? onToggleBlock;
+  /// Viewer-mode only: does the displayed peer follow me? Gates the
+  /// "Follow back" button.
+  final bool peerFollowsMe;
+  /// Viewer-mode only: do I already follow the displayed peer?
+  final bool iFollowPeer;
+  /// Viewer-mode only: follow the peer back.
+  final VoidCallback? onFollowBack;
   /// Viewer-mode only: have I liked this peer? Drives the heart overlay
   /// on their photo cell.
   final bool iLikePeer;
@@ -1654,13 +1716,26 @@ class _IdentitySection extends StatelessWidget {
                       icon: Icons.chat_bubble_outline,
                       onTap: onMessagePeer ?? () {},
                     ),
-                    const SizedBox(height: 10),
-                    _GradientActionButton(
-                      label: AppStrings.t(peerBlocked ? 'unblock' : 'block'),
-                      icon: peerBlocked ? Icons.lock_open : Icons.block,
-                      onTap: onToggleBlock ?? () {},
-                      destructive: !peerBlocked,
-                    ),
+                    // Second action depends on the follow relation:
+                    //  • peer follows me, I don't follow back → "Follow back"
+                    //  • I already follow them → a subdued "Following" state
+                    //  • strangers → nothing (Message button on its own)
+                    if (peerFollowsMe && !iFollowPeer) ...[
+                      const SizedBox(height: 10),
+                      _GradientActionButton(
+                        label: AppStrings.t('follow_back'),
+                        icon: Icons.person_add_alt_1,
+                        onTap: onFollowBack ?? () {},
+                      ),
+                    ] else if (iFollowPeer) ...[
+                      const SizedBox(height: 10),
+                      _GradientActionButton(
+                        label: AppStrings.t('follow_following'),
+                        icon: Icons.check,
+                        onTap: () {},
+                        subdued: true,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1964,21 +2039,20 @@ class _GradientActionButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
-    this.destructive = false,
+    this.subdued = false,
   });
 
   final String label;
   final IconData icon;
   final VoidCallback onTap;
-  final bool destructive;
+  /// Muted, non-emphasised style — used for the inert "Following" state.
+  final bool subdued;
 
   @override
   Widget build(BuildContext context) {
     // Solid colors instead of gradients — primary accent (site green) for
-    // the default action, red for destructive (Bloquer).
-    final bg = destructive
-        ? const Color(0xFFE53935)
-        : WhatsAppCallTheme.accent;
+    // the default action, dark card for the subdued "Following" state.
+    final bg = subdued ? WhatsAppCallTheme.bar : WhatsAppCallTheme.accent;
     return Material(
       color: bg,
       borderRadius: BorderRadius.circular(999),

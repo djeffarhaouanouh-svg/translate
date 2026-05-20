@@ -311,6 +311,34 @@ abstract final class FriendshipApi {
     await _c.from('friendships').delete().eq('id', friendshipId);
   }
 
+  /// Viewer-mode helper for the profile screen: resolves the two
+  /// independent directions of the relation between me ([meId]) and a
+  /// [peerId]. `peerFollowsMe` is true when the peer sent me a request
+  /// (their row: requester = peer, addressee = me); `iFollowPeer` is true
+  /// when I sent them one. Both can be true (mutual) or false (strangers).
+  static Future<({bool peerFollowsMe, bool iFollowPeer})> directionalWith({
+    required String meId,
+    required String peerId,
+  }) async {
+    if (!isSupabaseReady || meId.isEmpty || peerId.isEmpty || meId == peerId) {
+      return (peerFollowsMe: false, iFollowPeer: false);
+    }
+    try {
+      final mine = await fetchMine(meId);
+      var peerFollowsMe = false;
+      var iFollowPeer = false;
+      for (final f in mine) {
+        if (f.status != 'accepted') continue;
+        if (f.requester == peerId && f.addressee == meId) peerFollowsMe = true;
+        if (f.requester == meId && f.addressee == peerId) iFollowPeer = true;
+      }
+      return (peerFollowsMe: peerFollowsMe, iFollowPeer: iFollowPeer);
+    } catch (e) {
+      debugPrint('FriendshipApi.directionalWith failed: $e');
+      return (peerFollowsMe: false, iFollowPeer: false);
+    }
+  }
+
   /// Derive how I (`meId`) currently stand with [peerId] given a list of my
   /// friendships. Useful for tagging each search result with a status pill.
   static (FriendshipStatus, Friendship?) statusWith(

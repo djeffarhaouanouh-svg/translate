@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../services/app_strings.dart';
 import '../services/block_api.dart';
@@ -248,6 +249,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Opens the OS share sheet with the invite link. The native sheet lists
+  /// every app that can receive text — WhatsApp, Instagram, Snapchat, SMS,
+  /// Mail… — so there's no need for per-app buttons.
+  Future<void> _shareInvite() async {
+    // sharePositionOrigin is required on iPad (anchors the popover) and
+    // harmless elsewhere — pass this screen's bounds.
+    final box = context.findRenderObject() as RenderBox?;
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: AppStrings.t('invite_share_text'),
+          subject: AppStrings.t('invite_friend'),
+          sharePositionOrigin: box != null
+              ? box.localToGlobal(Offset.zero) & box.size
+              : null,
+        ),
+      );
+    } catch (_) {
+      // User dismissed the sheet or sharing is unavailable — nothing to do.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -272,6 +295,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
             ),
             Expanded(child: _buildBody()),
+            _InviteFriendBar(onTap: _shareInvite),
           ],
         ),
       ),
@@ -569,6 +593,50 @@ class _FriendChatRow extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pinned footer on the Messages page — taps open the native share sheet
+/// so the user can invite friends via WhatsApp / Instagram / Snapchat / SMS.
+/// Bottom padding clears the floating glass nav pill from [RootShell].
+class _InviteFriendBar extends StatelessWidget {
+  const _InviteFriendBar({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 8, 12, 78 + safeBottom),
+      child: Material(
+        color: WhatsAppCallTheme.accent,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.person_add_alt_1,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  AppStrings.t('invite_friend'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
