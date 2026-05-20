@@ -295,7 +295,16 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     }
   }
 
+  /// Animate the top card off-screen. [direction] is -1 for a swipe to the
+  /// LEFT and +1 for a swipe to the RIGHT.
+  ///
+  /// - Swipe left  → send a friend request to the current profile so the
+  ///   conversation shows up in the Messages page, then advance.
+  /// - Swipe right → just advance to the next profile.
   void _flyOff(int direction) {
+    if (direction < 0 && _topIndex < _profiles.length) {
+      _sendFriendRequest(_profiles[_topIndex]);
+    }
     _animFrom = _drag;
     _animTo = Offset(direction * (_cardSize.width + 200), _drag.dy + 80);
     _isFlying = true;
