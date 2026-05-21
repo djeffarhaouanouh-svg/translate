@@ -48,8 +48,7 @@ class AudioController extends ChangeNotifier {
   double get originalVolume => _prefs.originalVolume;
 
   /// Whether the original (LiveKit) remote audio is auto-lowered while
-  /// the remote person speaks (= while the translation pipeline is
-  /// emitting translated speech a moment later).
+  /// the translated audio is actually playing back.
   bool get duckingEnabled => _prefs.duckingEnabled;
 
   /// Whether the loudspeaker is routed (vs. earpiece). Ignored on
@@ -147,14 +146,14 @@ class AudioController extends ChangeNotifier {
     unawaited(UserPrefs.saveAudio(_prefs));
   }
 
-  /// Called by the call screen when the LiveKit active-speaker event
-  /// signals the remote is hot. Engages ducking with a small release
-  /// window so the original stays dampened while the translation
-  /// actually plays back.
-  void onRemoteVoiceHot(bool hot) {
+  /// Called by the call screen whenever the translated audio starts or
+  /// stops playing. Dampens the original remote audio for that window,
+  /// with a small release delay so the short gaps between translated
+  /// sentences don't make the volume flap.
+  void onTranslationSpeaking(bool speaking) {
     if (!_bound) return;
     if (!_prefs.duckingEnabled) return;
-    if (hot) {
+    if (speaking) {
       _duckRelease?.cancel();
       if (!_isDucking) {
         _isDucking = true;

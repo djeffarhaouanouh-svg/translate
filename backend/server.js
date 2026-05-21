@@ -2,13 +2,15 @@
 
 // LiveKit token API + optional Flutter web UI (folder ./web from Docker build).
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { AccessToken } = require('livekit-server-sdk');
-const { notifyUser } = require('./notify');
+const { notifyUser, broadcastLiveCall } = require('./notify');
+const { track, ingestEvents, countryFromReq } = require('./analytics');
 const {
   authUserId: stripeAuthUserId,
   createCheckoutSession,
@@ -60,6 +62,19 @@ const OPENAI_TRANSLATION_VAD_SILENCE_MS = (() => {
 const OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE =
   process.env.OPENAI_TRANSLATION_PASS_INPUT_LANGUAGE?.trim() === '1';
 const PORT = Number(process.env.PORT || 8787);
+
+/**
+ * HMAC key for signing guest-invite links. A dedicated secret is best, but
+ * we fall back to LIVEKIT_API_SECRET so the feature works with zero extra
+ * config on existing deployments. Empty → guest invites are disabled.
+ */
+const INVITE_SIGNING_SECRET = (
+  process.env.INVITE_SIGNING_SECRET || LIVEKIT_API_SECRET || ''
+).trim();
+/** Guest-call rooms carry this prefix — used to gate signature verification. */
+const GUEST_ROOM_PREFIX = 'guest-';
+/** How long an invite link stays valid after creation. */
+const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const OPENAI_TRANSLATION_CLIENT_SECRETS =
   'https://api.openai.com/v1/realtime/translations/client_secrets';
@@ -118,6 +133,31 @@ function sanitizeIdentity(id) {
     return null;
   }
   return id;
+}
+
+/** HMAC-sign a `<room>.<expiryMs>` tuple → URL-safe base64 string. */
+function signInvite(room, expStr) {
+  return crypto
+    .createHmac('sha256', INVITE_SIGNING_SECRET)
+    .update(`${room}.${expStr}`)
+    .digest('base64url');
+}
+
+/**
+ * Verify a guest-invite signature in constant time and reject expired links.
+ * `exp` / `sig` come straight from the request — treat both as untrusted.
+ */
+function verifyInvite(room, exp, sig) {
+  if (!INVITE_SIGNING_SECRET) return false;
+  if (typeof sig !== 'string' || !sig) return false;
+  const expStr = String(exp);
+  const expNum = Number(expStr);
+  if (!Number.isFinite(expNum) || expNum < Date.now()) return false;
+  const expected = signInvite(room, expStr);
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 const app = express();
@@ -182,6 +222,30 @@ app.post(
   },
 );
 
+// Analytics ingest — the app POSTs a batch of events here. Its own JSON
+// parser (larger limit than the 16kb global below) so a full 50-event
+// batch always fits. Registered before the global parser so this limit
+// wins for this route.
+app.post(
+  '/api/events',
+  express.json({ limit: '64kb' }),
+  async (req, res) => {
+    // Auth is optional: guests (invite-link callers, no Supabase account)
+    // still produce analytics. A valid Bearer token → events are
+    // attributed to that user; otherwise user_id stays null.
+    const uid = await stripeAuthUserId(req);
+    const events = Array.isArray(req.body?.events) ? req.body.events : [];
+    try {
+      const out = await ingestEvents(uid, events, countryFromReq(req));
+      return res.json(out);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('/api/events error', e);
+      return res.status(500).json({ error: 'ingest_failed' });
+    }
+  },
+);
+
 app.use(express.json({ limit: '16kb' }));
 
 app.get('/health', (_req, res) => {
@@ -222,6 +286,16 @@ app.post('/livekit/token', async (req, res) => {
     return res.status(400).json({ error: 'invalid_room_or_identity' });
   }
 
+  // Guest-call rooms are joinable without a Supabase account, so they must
+  // carry a valid, unexpired HMAC signature minted by POST /invite/create.
+  // Regular `call-*` / `live-*` rooms are unaffected.
+  if (room.startsWith(GUEST_ROOM_PREFIX)) {
+    const { inviteSig, inviteExp } = req.body || {};
+    if (!verifyInvite(room, inviteExp, inviteSig)) {
+      return res.status(403).json({ error: 'invalid_or_expired_invite' });
+    }
+  }
+
   const name =
     typeof displayName === 'string' && displayName.length > 0 && displayName.length <= 64
       ? displayName.slice(0, 64)
@@ -250,6 +324,26 @@ app.post('/livekit/token', async (req, res) => {
     token,
     roomName: room,
   });
+});
+
+/**
+ * POST /invite/create
+ * Auth: Authorization: Bearer <Supabase JWT> (the host must be signed in).
+ * Mints a one-off guest-call room + a signed, time-limited invite. The host
+ * shares the link; whoever opens it can join that room with no account.
+ * Returns: { roomName, exp, sig, ttlMs }
+ */
+app.post('/invite/create', async (req, res) => {
+  const uid = await stripeAuthUserId(req);
+  if (!uid) return res.status(401).json({ error: 'unauthenticated' });
+  if (!INVITE_SIGNING_SECRET) {
+    return res.status(500).json({ error: 'invite_signing_unconfigured' });
+  }
+  // 'guest-' + 24 hex chars = 30 chars — well inside the 3-64 room limit.
+  const room = GUEST_ROOM_PREFIX + crypto.randomBytes(12).toString('hex');
+  const exp = Date.now() + INVITE_TTL_MS;
+  const sig = signInvite(room, String(exp));
+  return res.json({ roomName: room, exp, sig, ttlMs: INVITE_TTL_MS });
 });
 
 /**
@@ -328,6 +422,22 @@ app.post('/translation/realtime/session', async (req, res) => {
       // exactly why the key was rejected (revoked, quota, model mismatch…).
       // eslint-disable-next-line no-console
       console.error('[xlate-session] OpenAI error', r.status, JSON.stringify(parsed).slice(0, 600));
+      track({
+        event: 'translation_session_failed',
+        lang_to: tag,
+        lang_from: inputTag || undefined,
+        props: { status: r.status },
+      });
+    } else {
+      // One translation session minted = the unit OpenAI Realtime bills
+      // on. The dashboard turns the count + matching call durations into
+      // the per-minute cost figure.
+      track({
+        event: 'translation_session',
+        lang_to: tag,
+        lang_from: inputTag || undefined,
+        props: { model: 'gpt-realtime-translate' },
+      });
     }
     return res.status(r.status).json(parsed);
   } catch (e) {
@@ -396,6 +506,19 @@ app.post('/translation/text', async (req, res) => {
       return res.status(r.status).json({ error: 'openai_error', detail: parsed });
     }
     const translated = parsed?.choices?.[0]?.message?.content ?? '';
+    // Token usage feeds the API-cost figure for in-app message
+    // translation (gpt-4.1-mini), priced separately from realtime calls.
+    track({
+      event: 'text_translation',
+      lang_from: from || undefined,
+      lang_to: to,
+      props: {
+        model: 'gpt-4.1-mini',
+        chars: text.length,
+        prompt_tokens: parsed?.usage?.prompt_tokens ?? null,
+        completion_tokens: parsed?.usage?.completion_tokens ?? null,
+      },
+    });
     return res.json({ translated });
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -451,6 +574,32 @@ app.post('/api/notify', async (req, res) => {
   } catch (e) {
     console.error('/api/notify error', e);
     return res.status(500).json({ error: 'notify_failed' });
+  }
+});
+
+// "Someone is live" re-engagement fan-out. Called by the app when a user
+// enters the live-call queue with nobody to pair with. Throttled two
+// ways so it can never spam:
+//   * global cooldown — at most one batch per LIVE_BROADCAST_COOLDOWN_MS,
+//   * per recipient — at most one push per 24h (see notify.js).
+// Requires the caller's Supabase JWT; their uid is excluded from the
+// fan-out (no point notifying the host of their own call).
+let lastLiveBroadcast = 0;
+const LIVE_BROADCAST_COOLDOWN_MS = 15 * 60 * 1000;
+app.post('/api/notify-live', async (req, res) => {
+  const uid = await stripeAuthUserId(req);
+  if (!uid) return res.status(401).json({ error: 'unauthenticated' });
+  const now = Date.now();
+  if (now - lastLiveBroadcast < LIVE_BROADCAST_COOLDOWN_MS) {
+    return res.json({ skipped: 'cooldown' });
+  }
+  lastLiveBroadcast = now;
+  try {
+    const out = await broadcastLiveCall(uid);
+    return res.json(out);
+  } catch (e) {
+    console.error('/api/notify-live error', e);
+    return res.status(500).json({ error: 'broadcast_failed' });
   }
 });
 

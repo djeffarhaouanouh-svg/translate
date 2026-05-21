@@ -5,7 +5,9 @@ import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../services/analytics.dart';
 import '../services/app_strings.dart';
 import '../services/audio_controller.dart';
 import '../services/auth_service.dart';
@@ -26,6 +28,7 @@ class CallScreen extends StatefulWidget {
     required this.displayName,
     required this.mySourceLang,
     required this.translation,
+    this.inviteShareText,
   });
 
   final String wsUrl;
@@ -36,6 +39,10 @@ class CallScreen extends StatefulWidget {
   /// language is read live from their LiveKit metadata.
   final String mySourceLang;
   final RealtimeTranslationPort translation;
+  /// When set, the empty-room "waiting" placeholder shows a button that
+  /// re-opens the share sheet with this text — used by the host of a
+  /// guest-invite call so they can resend the link while waiting.
+  final String? inviteShareText;
 
   @override
   State<CallScreen> createState() => _CallScreenState();
@@ -61,7 +68,7 @@ class _CallScreenState extends State<CallScreen> {
   bool _refreshPending = false;
 
   late final AudioController _audio = AudioController(translation: widget.translation);
-  bool _lastRemoteHot = false;
+  bool _lastTranslationSpeaking = false;
   /// Set to true the first time any RemoteParticipant joins the room.
   /// Used by the ParticipantDisconnectedEvent handler to distinguish
   /// "caller waiting alone before pickup" (empty + !_hadRemote → keep
@@ -69,11 +76,27 @@ class _CallScreenState extends State<CallScreen> {
   /// _hadRemote → auto-hangup so we don't burn credits on a ghost room).
   bool _hadRemote = false;
 
+  /// When the LiveKit room finished connecting — null until then. Used
+  /// to emit the analytics `call_ended` duration from [dispose] (which
+  /// always runs, whatever the exit path: hang-up, peer-left, back nav).
+  DateTime? _connectedAt;
+
+  /// `guest` / `live` / `friend`, inferred from the room-name prefix the
+  /// backend mints. Tags every call analytics event.
+  String get _callKind {
+    final n = widget.roomName;
+    if (n.startsWith('guest-')) return 'guest';
+    if (n.startsWith('live-')) return 'live';
+    return 'friend';
+  }
+
   void _onTranslationStateChanged() {
-    final hot = widget.translation.translationRemoteVoiceHot;
-    if (hot != _lastRemoteHot) {
-      _lastRemoteHot = hot;
-      _audio.onRemoteVoiceHot(hot);
+    // Duck the original remote audio for the exact window the translated
+    // audio is playing, so the translation is clearly audible over it.
+    final speaking = widget.translation.translationSpeaking;
+    if (speaking != _lastTranslationSpeaking) {
+      _lastTranslationSpeaking = speaking;
+      _audio.onTranslationSpeaking(speaking);
     }
   }
 
@@ -258,8 +281,21 @@ class _CallScreenState extends State<CallScreen> {
           _camOn = true;
         });
       }
+      _connectedAt = DateTime.now();
+      Analytics.track(
+        'call_started',
+        roomName: widget.roomName,
+        langFrom: widget.mySourceLang,
+        langTo: _attachedRemoteLang,
+        props: {'kind': _callKind},
+      );
     } catch (e) {
       await room.disconnect();
+      Analytics.track(
+        'call_failed',
+        roomName: widget.roomName,
+        props: {'kind': _callKind, 'message': e.toString()},
+      );
       if (mounted) {
         setState(() {
           _connecting = false;
@@ -333,6 +369,27 @@ class _CallScreenState extends State<CallScreen> {
     if (mounted) setState(() => _camOn = next);
   }
 
+  /// Re-open the OS share sheet with the guest-invite link. Only reachable
+  /// from the waiting-room placeholder when [CallScreen.inviteShareText] is
+  /// set (host side of a guest-invite call).
+  Future<void> _shareInviteLink() async {
+    final text = widget.inviteShareText;
+    if (text == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: text,
+          sharePositionOrigin: box != null
+              ? box.localToGlobal(Offset.zero) & box.size
+              : null,
+        ),
+      );
+    } catch (_) {
+      // Sheet dismissed or sharing unavailable — nothing to do.
+    }
+  }
+
   void _openAudioSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -387,6 +444,22 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
+    // call_ended is emitted here, not in _hangUp(), because dispose()
+    // runs on every exit path (hang-up, peer-left auto-hangup, system
+    // back) — so the call is counted exactly once with its duration.
+    final startedAt = _connectedAt;
+    if (startedAt != null) {
+      Analytics.track(
+        'call_ended',
+        roomName: widget.roomName,
+        langFrom: widget.mySourceLang,
+        langTo: _attachedRemoteLang,
+        props: {
+          'kind': _callKind,
+          'duration_ms': DateTime.now().difference(startedAt).inMilliseconds,
+        },
+      );
+    }
     widget.translation.translationListenable?.removeListener(_onTranslationStateChanged);
     _audio.dispose();
     UsageTracker.creditsExhausted.removeListener(_onCreditsExhausted);
@@ -569,6 +642,14 @@ class _CallScreenState extends State<CallScreen> {
                             fontSize: 13,
                           ),
                         ),
+                        if (widget.inviteShareText != null) ...[
+                          const SizedBox(height: 22),
+                          FilledButton.icon(
+                            onPressed: _shareInviteLink,
+                            icon: const Icon(Icons.ios_share_rounded, size: 18),
+                            label: Text(AppStrings.t('call_share_invite')),
+                          ),
+                        ],
                       ],
                     ),
                   ),

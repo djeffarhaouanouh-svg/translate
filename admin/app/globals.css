@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* Swayco admin — dark, single theme. The dashboard is an internal tool,
+   so there is deliberately no light mode / theme toggle. */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: #09090b;
+  color: #fafafa;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin dark scrollbars so long tables / sidebars stay on-theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}

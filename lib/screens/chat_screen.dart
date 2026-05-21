@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,14 +10,18 @@ import '../services/chat_api.dart';
 import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/friendship_api.dart';
+import '../services/guest_invite_api.dart';
 import '../services/languages.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
+import '../services/token_api.dart';
+import '../services/user_prefs.dart';
 import '../services/web_poll.dart';
 import '../theme/whatsapp_call_theme.dart';
 import '../translation/realtime_translation_port.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/report_dialog.dart';
+import 'call_screen.dart';
 import 'chat_thread_screen.dart';
 import 'profile_screen.dart';
 
@@ -43,6 +48,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   Timer? _pollTimer;
+  /// UI lock while a guest-invite link is being minted (prevents double-tap).
+  bool _creatingInvite = false;
 
   @override
   void initState() {
@@ -271,6 +278,94 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Random LiveKit identity for the host joining a guest-invite call.
+  String _newCallIdentity() {
+    final r = Random();
+    return 'u${DateTime.now().millisecondsSinceEpoch}${r.nextInt(999999)}';
+  }
+
+  /// Mint a guest-invite link, open the share sheet, then drop the host into
+  /// the call's waiting room. Whoever opens the link joins with no account;
+  /// the host (the caller) is the one billed for the call.
+  Future<void> _shareCallInvite() async {
+    if (_creatingInvite) return;
+    setState(() => _creatingInvite = true);
+    try {
+      // The host needs a name + spoken language for the call's translation
+      // route — the same profile fields onboarding collects.
+      final profile = await UserPrefs.loadProfile();
+      final myName = profile?.firstName.trim() ?? '';
+      final myLang = profile?.sourceLang.trim() ?? '';
+      if (myName.isEmpty || myLang.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.t('invite_call_need_profile'))),
+        );
+        return;
+      }
+      final invite = await GuestInviteApi.create();
+      if (invite == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.t('invite_call_failed'))),
+        );
+        return;
+      }
+      final shareText = AppStrings.t(
+        'invite_call_share_text',
+        args: {'link': invite.link},
+      );
+      // Open the OS share sheet so the host can send the link right away.
+      if (mounted) {
+        final box = context.findRenderObject() as RenderBox?;
+        try {
+          await SharePlus.instance.share(
+            ShareParams(
+              text: shareText,
+              subject: AppStrings.t('invite_to_call'),
+              sharePositionOrigin: box != null
+                  ? box.localToGlobal(Offset.zero) & box.size
+                  : null,
+            ),
+          );
+        } catch (_) {
+          // Sheet dismissed — still enter the waiting room; the host can
+          // re-share the link from there.
+        }
+      }
+      // Enter the waiting room — the call connects when the guest joins.
+      final token = await fetchLiveKitToken(
+        roomName: invite.roomName,
+        identity: _newCallIdentity(),
+        displayName: myName,
+        sourceLang: myLang,
+        inviteSig: invite.sig,
+        inviteExp: invite.exp,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            wsUrl: token.url,
+            jwt: token.token,
+            roomName: token.roomName,
+            displayName: myName,
+            mySourceLang: myLang,
+            translation: widget.translation,
+            inviteShareText: shareText,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.t('invite_call_failed'))),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingInvite = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -295,7 +390,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
             ),
             Expanded(child: _buildBody()),
-            _InviteFriendBar(onTap: _shareInvite),
+            _InviteFriendBar(
+              onInviteToCall: _creatingInvite ? null : _shareCallInvite,
+              onInviteFriend: _shareInvite,
+              creatingInvite: _creatingInvite,
+            ),
           ],
         ),
       ),
@@ -599,45 +698,84 @@ class _FriendChatRow extends StatelessWidget {
   }
 }
 
-/// Pinned footer on the Messages page — taps open the native share sheet
-/// so the user can invite friends via WhatsApp / Instagram / Snapchat / SMS.
-/// Bottom padding clears the floating glass nav pill from [RootShell].
+/// Pinned footer on the Messages page. The primary button mints a guest
+/// invite link (join a call with no account); the secondary one opens the
+/// classic "invite a friend to Swayco" share sheet. Both use the native OS
+/// share sheet. Bottom padding clears the floating glass nav pill.
 class _InviteFriendBar extends StatelessWidget {
-  const _InviteFriendBar({required this.onTap});
+  const _InviteFriendBar({
+    required this.onInviteToCall,
+    required this.onInviteFriend,
+    required this.creatingInvite,
+  });
 
-  final VoidCallback onTap;
+  /// Null while a link is being minted — disables the button.
+  final VoidCallback? onInviteToCall;
+  final VoidCallback onInviteFriend;
+  final bool creatingInvite;
 
   @override
   Widget build(BuildContext context) {
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(12, 8, 12, 78 + safeBottom),
-      child: Material(
-        color: WhatsAppCallTheme.accent,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.person_add_alt_1,
-                    color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Text(
-                  AppStrings.t('invite_friend'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Material(
+            color: WhatsAppCallTheme.accent,
+            borderRadius: BorderRadius.circular(14),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onInviteToCall,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (creatingInvite)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      const Icon(Icons.videocam_rounded,
+                          color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      creatingInvite
+                          ? AppStrings.t('invite_call_creating')
+                          : AppStrings.t('invite_to_call'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          TextButton.icon(
+            onPressed: onInviteFriend,
+            icon: const Icon(Icons.person_add_alt_1,
+                color: WhatsAppCallTheme.subtleText, size: 18),
+            label: Text(
+              AppStrings.t('invite_friend'),
+              style: const TextStyle(
+                color: WhatsAppCallTheme.subtleText,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -14,18 +14,23 @@
 //   * Apple Dev: an APNs Authentication Key uploaded into Firebase
 //     Console → Cloud Messaging → Apple app configuration.
 
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import 'notification_api.dart';
+import 'notification_router.dart';
 
 abstract final class NotificationClient {
   static Future<bool> register(String userId) async {
     if (userId.isEmpty) return false;
     try {
       final messaging = FirebaseMessaging.instance;
+      // Route notification taps to the right screen (cold launch +
+      // background tap). Independent of the token registration below.
+      unawaited(_wireTapRouting());
       // iOS / web require an explicit permission request. Android <13
       // grants on install; Android 13+ matches the iOS prompt.
       final settings = await messaging.requestPermission(
@@ -70,6 +75,22 @@ abstract final class NotificationClient {
       debugPrint('[notify] register (firebase) failed: $e');
       return false;
     }
+  }
+
+  static bool _tapWired = false;
+
+  /// Wires notification-tap → in-app routing via [NotificationRouter].
+  /// Idempotent — safe to call on every [register].
+  static Future<void> _wireTapRouting() async {
+    if (_tapWired) return;
+    _tapWired = true;
+    // Background → foreground when the user taps a notification.
+    FirebaseMessaging.onMessageOpenedApp.listen((m) {
+      NotificationRouter.submit(m.data);
+    });
+    // Cold launch: the app was started by tapping a notification.
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) NotificationRouter.submit(initial.data);
   }
 
   static Future<void> unregister(String userId) async {

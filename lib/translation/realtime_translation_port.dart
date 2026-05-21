@@ -41,6 +41,11 @@ abstract class RealtimeTranslationPort {
   /// LiveKit active speaker list includes a remote participant (for a subtle pulse).
   bool get translationRemoteVoiceHot => false;
 
+  /// True while the translated audio is actually playing back. Lets the
+  /// call screen duck the original remote audio for the exact window the
+  /// translation can be heard.
+  bool get translationSpeaking => false;
+
   /// Set the playback volume of the translated audio in [0, 1]. No-op when
   /// the implementation has no translated audio stream of its own.
   Future<void> setTranslatedAudioVolume(double volume) async {}
@@ -69,6 +74,9 @@ class NoOpRealtimeTranslation implements RealtimeTranslationPort {
 
   @override
   bool get translationRemoteVoiceHot => false;
+
+  @override
+  bool get translationSpeaking => false;
 
   @override
   Future<void> setTranslatedAudioVolume(double volume) async {}

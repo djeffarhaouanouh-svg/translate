@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:livekit_client/livekit_client.dart';
 
+import '../services/analytics.dart';
 import '../services/translation_api.dart';
 import 'realtime_translation_port.dart';
 import 'translation_route.dart';
@@ -44,7 +46,17 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   bool _busy = false;
   DateTime? _lastConnectionDropSchedule;
   bool _remoteVoiceHot = false;
+  /// True while OpenAI is actually streaming translated audio out over the
+  /// WebRTC connection — bounded by the `output_audio_buffer.started` /
+  /// `.stopped` events on the `oai-events` data channel.
+  bool _translationSpeaking = false;
   bool _wasPcConnected = false;
+
+  /// Wall-clock moment the current pipeline open began (set at the top
+  /// of [_openPipelineCore]). The gap to the first "pc connected" is
+  /// reported as `translation_connected` setup latency for the
+  /// dashboard's average-latency figure.
+  DateTime? _pipelineOpenStartedAt;
 
   /// Playback volume for the translated-audio renderer in [0, 1]. Stored
   /// here so the value survives renderer rebuilds (refresh / reconnect).
@@ -85,6 +97,9 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
 
   @override
   bool get translationRemoteVoiceHot => _remoteVoiceHot;
+
+  @override
+  bool get translationSpeaking => _translationSpeaking;
 
   @override
   Future<void> setTranslatedAudioVolume(double volume) async {
@@ -287,8 +302,19 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   void _onPcConnectionState(RTCPeerConnectionState state) {
     debugPrint('[xlate] pc state → $state');
     final nowConnected = state == RTCPeerConnectionState.RTCPeerConnectionStateConnected;
-    if (nowConnected && !_wasPcConnected && !kIsWeb) {
-      HapticFeedback.lightImpact();
+    if (nowConnected && !_wasPcConnected) {
+      if (!kIsWeb) HapticFeedback.lightImpact();
+      // Translation pipeline is live — report setup latency.
+      final startedAt = _pipelineOpenStartedAt;
+      if (startedAt != null) {
+        final route = _route;
+        Analytics.track(
+          'translation_connected',
+          langFrom: route?.targetBcp47,
+          langTo: route?.sourceBcp47,
+          latencyMs: DateTime.now().difference(startedAt).inMilliseconds,
+        );
+      }
     }
     _wasPcConnected = nowConnected;
     notifyListeners();
@@ -326,6 +352,31 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     }
   }
 
+  /// Parse an `oai-events` data-channel message and track whether OpenAI
+  /// is currently emitting translated audio. Over the WebRTC transport the
+  /// model signals playback boundaries with `output_audio_buffer.started`
+  /// / `.stopped` / `.cleared` — exactly the window during which the
+  /// original remote audio should be ducked so the translation stands out.
+  void _handleOaiEvent(String raw) {
+    String? type;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) type = decoded['type'] as String?;
+    } catch (_) {
+      return; // not JSON — ignore
+    }
+    bool? speaking;
+    if (type == 'output_audio_buffer.started') {
+      speaking = true;
+    } else if (type == 'output_audio_buffer.stopped' ||
+        type == 'output_audio_buffer.cleared') {
+      speaking = false;
+    }
+    if (speaking == null || speaking == _translationSpeaking) return;
+    _translationSpeaking = speaking;
+    notifyListeners();
+  }
+
   void _startVadIdleWatcher() {
     _vadIdleTimer?.cancel();
     _lastSpeakerActiveAt = DateTime.now();
@@ -358,6 +409,8 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
     final pc = _pc;
     _pc = null;
     _wasPcConnected = false;
+    // No pipeline → no translated audio playing; un-duck the original.
+    _translationSpeaking = false;
     if (pc != null) {
       try {
         pc.onConnectionState = null;
@@ -399,6 +452,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
   ) async {
     final route = _route;
     if (route == null || !route.isConfigured) return;
+    _pipelineOpenStartedAt = DateTime.now();
     // Belt-and-braces against any code path that might reach this point
     // while the room is empty (race between detach and a stale refresh
     // timer firing). Without a remote there's nothing to translate, and
@@ -454,6 +508,7 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
         if (t.length < 400) {
           debugPrint('OpenAI translation dc: $t');
         }
+        _handleOaiEvent(t);
       };
 
       cloned = await remote.mediaStreamTrack.clone();
@@ -592,6 +647,12 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       debugPrint('[xlate] refresh OK — new pipeline opened');
     } catch (e, st) {
       debugPrint('[xlate] refresh FAILED: $e\n$st');
+      Analytics.track(
+        'translation_error',
+        langFrom: _route?.targetBcp47,
+        langTo: _route?.sourceBcp47,
+        props: {'phase': 'refresh', 'message': e.toString()},
+      );
       await _stopMedia();
       _scheduleNextRefreshRaw(const Duration(seconds: 6));
     } finally {
@@ -674,6 +735,12 @@ class OpenAiRealtimeTranslation extends ChangeNotifier implements RealtimeTransl
       await _openPipelineCore(remote, publicationSid, roomRef);
     } catch (e, st) {
       debugPrint('OpenAi translation failed: $e\n$st');
+      Analytics.track(
+        'translation_error',
+        langFrom: _route?.targetBcp47,
+        langTo: _route?.sourceBcp47,
+        props: {'phase': 'bind', 'message': e.toString()},
+      );
       await _stopMedia();
       _scheduleNextRefreshRaw(const Duration(seconds: 6));
     } finally {

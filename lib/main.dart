@@ -6,12 +6,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'firebase_options.dart';
+import 'screens/guest_join_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/root_shell.dart';
+import 'services/analytics.dart';
 import 'services/app_strings.dart';
 import 'services/auth_service.dart';
 import 'services/chat_unread.dart';
+import 'services/guest_invite_api.dart';
 import 'services/notification_client.dart';
 import 'services/profile_api.dart';
 import 'services/supabase_service.dart';
@@ -37,6 +40,13 @@ Future<void> main() async {
       debugPrint('Firebase init failed: $e');
     }
   }
+  // Analytics for the admin dashboard. Starts the batched flush loop and
+  // records one `app_open` per launch — the basis for retention (D1/D7/
+  // D30) and recurring-user counts.
+  Analytics.start();
+  Analytics.track('app_open', props: {
+    'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+  });
   runApp(const LiveKitTranslateApp());
 }
 
@@ -51,6 +61,9 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   bool _loading = true;
   bool _needsOnboarding = false;
   bool _authed = false;
+  /// Set when the app was opened via a guest-invite link (`/c/<room>` on
+  /// web). Non-null → skip login entirely and show [GuestJoinScreen].
+  GuestInvite? _guestInvite;
   late final OpenAiRealtimeTranslation _translation;
   StreamSubscription<AuthState>? _authSub;
 
@@ -83,6 +96,18 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
   }
 
   Future<void> _bootstrap() async {
+    // A guest-invite deep link (`/c/<room>` on web) bypasses login entirely:
+    // the visitor joins the call with no account. Detected before anything
+    // else so an auth check never gates them.
+    final invite = GuestInviteApi.fromCurrentUrl();
+    if (invite != null) {
+      if (!mounted) return;
+      setState(() {
+        _guestInvite = invite;
+        _loading = false;
+      });
+      return;
+    }
     // Restore the UI language from local prefs as early as possible so the
     // login screen renders in whatever the user picked last time on this
     // device (no-op for a fresh install — falls back to the default).
@@ -191,6 +216,13 @@ class _LiveKitTranslateAppState extends State<LiveKitTranslateApp> {
         body: Center(
           child: CircularProgressIndicator(color: WhatsAppCallTheme.accent),
         ),
+      );
+    }
+    // Guest-invite link → straight to the join screen, no login.
+    if (_guestInvite != null) {
+      return GuestJoinScreen(
+        invite: _guestInvite!,
+        translation: _translation,
       );
     }
     // Login first. Onboarding only runs for brand-new accounts (no Supabase

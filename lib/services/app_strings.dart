@@ -159,9 +159,30 @@ abstract final class AppStrings {
         "Va dans l'onglet Recherche pour trouver quelqu'un par son prénom, puis envoie une demande d'ami pour pouvoir discuter avec lui.",
     'chat_no_name': 'Sans nom',
     'chat_tap_to_chat': 'Toucher pour discuter',
-    'invite_friend': 'Inviter un ami',
+    'invite_friend': 'Inviter un ami sur Swayco',
     'invite_share_text':
         'Rejoins-moi sur Swayco 🌍 — appels vidéo avec traduction en temps réel : https://www.swayco.fr',
+    // Invite-to-call (guest link, no account needed)
+    'invite_to_call': 'Inviter à un appel',
+    'invite_call_share_text':
+        'Rejoins mon appel vidéo traduit en direct sur Swayco 🌍 — clique, pas besoin de compte : {link}',
+    'invite_call_creating': 'Création du lien…',
+    'invite_call_failed': "Impossible de créer le lien d'invitation. Réessaie.",
+    'invite_call_need_profile':
+        "Complète ton profil (prénom + langue) avant d'inviter quelqu'un.",
+    'call_share_invite': 'Partager le lien',
+    // Guest join screen (opened from an invite link)
+    'guest_title': "Rejoindre l'appel",
+    'guest_subtitle':
+        'Pas besoin de compte. Choisis ta langue, puis rejoins.',
+    'guest_default_name': 'Invité',
+    'guest_lang_label': 'Tu parles…',
+    'guest_join_cta': "Rejoindre l'appel",
+    'guest_need_lang': 'Choisis ta langue',
+    'guest_link_expired':
+        "Ce lien d'invitation a expiré. Demande-en un nouveau à la personne qui t'a invité.",
+    'guest_join_error': "Impossible de rejoindre l'appel. Réessaie.",
+    'guest_connecting': "Connexion à l'appel…",
     'tooltip_more': 'Plus',
     'view_profile': 'Voir profil',
     // Chat thread
@@ -393,9 +414,30 @@ abstract final class AppStrings {
         'Go to the Search tab to find someone by their first name, then send a friend request to chat with them.',
     'chat_no_name': 'No name',
     'chat_tap_to_chat': 'Tap to chat',
-    'invite_friend': 'Invite a friend',
+    'invite_friend': 'Invite a friend to Swayco',
     'invite_share_text':
         'Join me on Swayco 🌍 — video calls with real-time translation: https://www.swayco.fr',
+    // Invite-to-call (guest link, no account needed)
+    'invite_to_call': 'Invite to a call',
+    'invite_call_share_text':
+        'Join my live-translated video call on Swayco 🌍 — just tap, no account needed: {link}',
+    'invite_call_creating': 'Creating link…',
+    'invite_call_failed': 'Could not create the invite link. Try again.',
+    'invite_call_need_profile':
+        'Complete your profile (name + language) before inviting someone.',
+    'call_share_invite': 'Share the link',
+    // Guest join screen (opened from an invite link)
+    'guest_title': 'Join the call',
+    'guest_subtitle':
+        'No account needed. Pick your language, then join.',
+    'guest_default_name': 'Guest',
+    'guest_lang_label': 'You speak…',
+    'guest_join_cta': 'Join the call',
+    'guest_need_lang': 'Pick your language',
+    'guest_link_expired':
+        'This invite link has expired. Ask the person who invited you for a new one.',
+    'guest_join_error': 'Could not join the call. Try again.',
+    'guest_connecting': 'Joining the call…',
     'tooltip_more': 'More',
     'view_profile': 'View profile',
     'block_peer_q': 'Block {name}?',

@@ -75,10 +75,14 @@ Future<LiveKitTokenResponse> fetchLiveKitToken({
   required String displayName,
   String sourceLang = '',
   String targetLang = '',
+  String inviteSig = '',
+  String inviteExp = '',
 }) async {
   final uri = _liveKitTokenUri();
   // sourceLang goes into the participant metadata; the remote side reads it
   // from `participant.metadata` to know what language to translate FROM.
+  // inviteSig / inviteExp are only set for guest-call rooms (`guest-*`):
+  // the backend rejects those rooms unless the signature is valid.
   final res = await http.post(
     uri,
     headers: const {'Content-Type': 'application/json'},
@@ -88,6 +92,8 @@ Future<LiveKitTokenResponse> fetchLiveKitToken({
       'displayName': displayName,
       'sourceLang': sourceLang,
       'targetLang': targetLang,
+      if (inviteSig.isNotEmpty) 'inviteSig': inviteSig,
+      if (inviteExp.isNotEmpty) 'inviteExp': inviteExp,
     }),
   );
   if (res.statusCode != 200) {

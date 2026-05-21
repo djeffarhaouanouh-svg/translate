@@ -68,3 +68,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Claude Code local config (per-machine settings, not app code)
+.claude/
+
+# Stray screenshots (French Windows default name)
+Capture d'écran*.png
+capture-*.png

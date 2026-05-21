@@ -9,6 +9,7 @@ import '../services/call_alert.dart';
 import '../services/chat_unread.dart';
 import '../services/device_id.dart';
 import '../services/incoming_call_api.dart';
+import '../services/notification_router.dart';
 import '../services/profile_api.dart';
 import '../services/supabase_service.dart';
 import '../services/token_api.dart';
@@ -19,6 +20,7 @@ import '../widgets/profile_avatar.dart';
 import 'call_screen.dart';
 import 'chat_screen.dart';
 import 'discover_screen.dart';
+import 'live_call_screen.dart';
 import 'profile_screen.dart';
 
 /// Floating glass-morphism bottom-nav with a sliding pill that animates
@@ -37,13 +39,10 @@ class _RootShellState extends State<RootShell> {
   static const _mainIndex = 1;
   int _index = _mainIndex;
 
-  // Order: Chat (0), Discover (1), Profile (2). Discover is the default
-  // landing tab; Chat hosts the friends list + call entry point.
-  late final List<Widget> _pages = <Widget>[
-    ChatScreen(translation: widget.translation),
-    const DiscoverScreen(),
-    const ProfileScreen(),
-  ];
+  // Tab order: Chat (0), Discover (1), Live (2), Profile (3). Discover is
+  // the default landing tab. The pages list is rebuilt every frame in
+  // build() so the Live tab can be told whether it is currently visible
+  // (it holds the camera only while on screen).
 
   RealtimeChannel? _callsChannel;
   bool _ringingDialogOpen = false;
@@ -58,6 +57,29 @@ class _RootShellState extends State<RootShell> {
   void initState() {
     super.initState();
     _subscribeIncomingCalls();
+    // Route taps on push notifications (live-call invite, message, …).
+    NotificationRouter.pending.addListener(_onNotificationIntent);
+    // A cold launch from a notification tap may have set an intent
+    // before this shell mounted — handle it once after the first frame.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _onNotificationIntent(),
+    );
+  }
+
+  /// Sends the shell to the screen a tapped notification points at.
+  void _onNotificationIntent() {
+    final intent = NotificationRouter.pending.value;
+    if (intent == null || !mounted) return;
+    switch (intent.type) {
+      case 'live_call':
+        if (_index != 2) setState(() => _index = 2);
+      case 'message':
+        if (_index != 0) setState(() => _index = 0);
+        ChatUnread.markAllSeen();
+      // 'incoming_call' needs no routing — the ring modal is shown by
+      // the realtime subscription / poll whatever tab is open.
+    }
+    NotificationRouter.consume();
   }
 
   Future<void> _subscribeIncomingCalls() async {
@@ -156,6 +178,7 @@ class _RootShellState extends State<RootShell> {
   @override
   void dispose() {
     _callPollTimer?.cancel();
+    NotificationRouter.pending.removeListener(_onNotificationIntent);
     final ch = _callsChannel;
     if (ch != null) {
       unawaited(Supabase.instance.client.removeChannel(ch));
@@ -171,9 +194,18 @@ class _RootShellState extends State<RootShell> {
       body: ValueListenableBuilder<int>(
         valueListenable: ChatUnread.count,
         builder: (context, unread, _) {
+          final pages = <Widget>[
+            ChatScreen(translation: widget.translation),
+            const DiscoverScreen(),
+            LiveCallScreen(
+              active: _index == 2,
+              translation: widget.translation,
+            ),
+            const ProfileScreen(),
+          ];
           return Stack(
             children: [
-              IndexedStack(index: _index, children: _pages),
+              IndexedStack(index: _index, children: pages),
               Positioned(
                 left: 0,
                 right: 0,
@@ -226,6 +258,11 @@ class _GlassNavBar extends StatelessWidget {
         icon: Icons.search,
         selectedIcon: Icons.manage_search,
         label: AppStrings.t('nav_search'),
+      ),
+      const _NavItemData(
+        icon: Icons.public,
+        selectedIcon: Icons.travel_explore,
+        label: 'Live',
       ),
       _NavItemData(
         icon: Icons.person_outline,
